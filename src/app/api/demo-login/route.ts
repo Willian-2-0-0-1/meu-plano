@@ -30,7 +30,11 @@ export async function GET(req: NextRequest) {
     ? `${proto}://localhost:${host.split(":")[1] || "43123"}`
     : `${proto}://${host}`;
 
-  const cookieName = "authjs.session-token";
+  const secure =
+    req.headers.get("x-forwarded-proto") === "https" ||
+    req.nextUrl.protocol === "https:" ||
+    process.env.NODE_ENV === "production";
+  const cookieName = secure ? "__Secure-authjs.session-token" : "authjs.session-token";
   const token = await encode({
     token: {
       sub: user.id,
@@ -49,7 +53,7 @@ export async function GET(req: NextRequest) {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    secure: false,
+    secure,
     maxAge: SESSION_MAX_AGE,
   });
   return res;
