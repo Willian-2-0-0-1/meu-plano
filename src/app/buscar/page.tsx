@@ -1,6 +1,7 @@
 import { ProviderCard } from "@/components/provider-card";
 import { runProviderSearch } from "@/lib/search";
 import { Search } from "lucide-react";
+import Link from "next/link";
 
 export default async function BuscarPage({
   searchParams,
@@ -107,9 +108,9 @@ export default async function BuscarPage({
       ) : (
         <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900">
           Nenhum plano selecionado.{" "}
-          <a href="/" className="font-semibold underline">
+          <Link href="/" className="font-semibold underline">
             Escolha seu plano na home
-          </a>{" "}
+          </Link>{" "}
           para ver status de aceitação.
         </p>
       )}
