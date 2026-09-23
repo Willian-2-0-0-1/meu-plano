@@ -1,44 +1,13 @@
 "use client";
 
-import { FormEvent, Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 function LoginForm() {
-  const router = useRouter();
   const params = useSearchParams();
-  const [email, setEmail] = useState("demo@meuplano.app");
-  const [password, setPassword] = useState("demo123");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          password,
-          callbackUrl: params.get("callbackUrl") || "/",
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Não foi possível entrar.");
-        setLoading(false);
-        return;
-      }
-      router.push(data.callbackUrl || "/");
-      router.refresh();
-    } catch {
-      setError("Falha de rede. Tente de novo.");
-      setLoading(false);
-    }
-  }
+  const callbackUrl = params.get("callbackUrl") || "/";
+  const error = params.get("error");
 
   return (
     <main className="flex min-h-dvh flex-col px-4 pb-10 pt-10 md:px-6">
@@ -53,14 +22,20 @@ function LoginForm() {
           </p>
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-3 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+        {/* Form nativo POST — funciona mesmo se o JS do React não hidratar */}
+        <form
+          method="POST"
+          action="/api/login"
+          className="space-y-3 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"
+        >
+          <input type="hidden" name="callbackUrl" value={callbackUrl} />
           <label className="block text-xs font-medium text-slate-600">
             E-mail
             <input
               type="email"
+              name="email"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              defaultValue="demo@meuplano.app"
               autoComplete="username"
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500"
             />
@@ -69,20 +44,23 @@ function LoginForm() {
             Senha
             <input
               type="password"
+              name="password"
               required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              defaultValue="demo123"
               autoComplete="current-password"
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500"
             />
           </label>
-          {error && <p className="text-sm text-rose-600">{error}</p>}
+          {error && (
+            <p className="text-sm text-rose-600">
+              E-mail ou senha incorretos. Tente de novo.
+            </p>
+          )}
           <button
             type="submit"
-            disabled={loading}
-            className="w-full rounded-xl bg-brand-600 py-3 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
+            className="w-full rounded-xl bg-brand-600 py-3 text-sm font-semibold text-white hover:bg-brand-700"
           >
-            {loading ? "Entrando…" : "Entrar"}
+            Entrar
           </button>
         </form>
 

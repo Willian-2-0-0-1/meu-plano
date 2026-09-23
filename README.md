@@ -18,7 +18,7 @@ PWA mobile-first para encontrar médicos, clínicas, laboratórios e hospitais q
 npm install
 cp .env.example .env   # se ainda não tiver .env
 npm run db:setup       # cria tabelas + seed demo
-npm run dev            # http://127.0.0.1:43123
+npm run dev            # http://localhost:43123
 ```
 
 ### Contas demo
