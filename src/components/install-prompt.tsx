@@ -1,16 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 const DISMISSED_KEY = "meuplano-install-dismissed";
 
 export function InstallPrompt() {
+  const pathname = usePathname();
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [visible, setVisible] = useState(false);
   const [iosHint, setIosHint] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (pathname.startsWith("/entrar") || pathname.startsWith("/onboarding") || pathname.startsWith("/admin")) {
+      setVisible(false);
+      return;
+    }
     if (localStorage.getItem(DISMISSED_KEY) === "1") return;
 
     const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -34,7 +40,7 @@ export function InstallPrompt() {
     };
     window.addEventListener("beforeinstallprompt", handler);
     return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
+  }, [pathname]);
 
   if (!visible) return null;
 

@@ -1,8 +1,7 @@
 "use client";
 
-import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 function LoginForm() {
@@ -17,18 +16,28 @@ function LoginForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const res = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
-    setLoading(false);
-    if (res?.error) {
-      setError("E-mail ou senha incorretos.");
-      return;
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password,
+          callbackUrl: params.get("callbackUrl") || "/",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Não foi possível entrar.");
+        setLoading(false);
+        return;
+      }
+      router.push(data.callbackUrl || "/");
+      router.refresh();
+    } catch {
+      setError("Falha de rede. Tente de novo.");
+      setLoading(false);
     }
-    router.push(params.get("callbackUrl") || "/");
-    router.refresh();
   }
 
   return (
@@ -52,6 +61,7 @@ function LoginForm() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500"
             />
           </label>
@@ -62,6 +72,7 @@ function LoginForm() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500"
             />
           </label>
@@ -96,7 +107,7 @@ function LoginForm() {
 
 export default function EntrarPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<div className="p-6 text-sm text-slate-500">Carregando…</div>}>
       <LoginForm />
     </Suspense>
   );
