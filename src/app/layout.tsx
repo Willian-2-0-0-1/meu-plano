@@ -53,9 +53,10 @@ export default function RootLayout({
           <div className="mx-auto min-h-dvh max-w-lg pb-24 md:max-w-3xl lg:max-w-5xl">
             {children}
           </div>
-          <BottomNav />
           <InstallPrompt />
         </AuthProvider>
+        {/* Fora do AuthProvider: Server Component com <a> nativos */}
+        <BottomNav />
       </body>
     </html>
   );

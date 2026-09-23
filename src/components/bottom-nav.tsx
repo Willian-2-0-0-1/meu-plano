@@ -1,6 +1,4 @@
-"use client";
-
-import { usePathname } from "next/navigation";
+import { headers } from "next/headers";
 import { Heart, Home, Search, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -11,9 +9,11 @@ const items = [
   { href: "/perfil", label: "Perfil", icon: User },
 ];
 
-/** Usa <a> nativo (não next/link) para navegação funcionar sem hidratação */
-export function BottomNav() {
-  const pathname = usePathname();
+/** Server Component + <a> nativos — sem next/navigation (evita HMR quebrado) */
+export async function BottomNav() {
+  const h = await headers();
+  const pathname = h.get("x-meu-plano-path") || "";
+
   const hide =
     pathname.startsWith("/onboarding") ||
     pathname.startsWith("/entrar") ||
@@ -27,7 +27,7 @@ export function BottomNav() {
         {items.map(({ href, label, icon: Icon }) => {
           const active =
             href === "/"
-              ? pathname === "/"
+              ? pathname === "/" || pathname === ""
               : pathname === href || pathname.startsWith(`${href}/`);
           return (
             <a
