@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack --hostname 0.0.0.0 --port 43123",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && prisma db push && tsx prisma/seed.ts && next build",
     "start": "next start --hostname 0.0.0.0 --port 43123",
     "lint": "eslint",
     "db:push": "prisma db push",
