@@ -21,7 +21,7 @@
   --color-brand-600: var(--brand-600);
   --color-brand-700: var(--brand-700);
   --color-brand-900: var(--brand-900);
-  --font-sans: var(--font-plus-jakarta);
+  --font-sans: "Segoe UI", sans-serif;
 }
 
 body {
@@ -30,7 +30,7 @@ body {
     radial-gradient(900px 400px at 100% 0%, #ecfdf5 0%, transparent 50%),
     var(--background);
   color: var(--foreground);
-  font-family: var(--font-plus-jakarta), "Segoe UI", sans-serif;
+  font-family: "Segoe UI", sans-serif;
   min-height: 100dvh;
 }
 

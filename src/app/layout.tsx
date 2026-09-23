@@ -1,16 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { BottomNav } from "@/components/bottom-nav";
 import { InstallPrompt } from "@/components/install-prompt";
 import { ServiceWorkerRegister } from "@/components/sw-register";
-
-const plusJakarta = Plus_Jakarta_Sans({
-  variable: "--font-plus-jakarta",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-});
 
 export const metadata: Metadata = {
   title: "Meu Plano — Encontre quem aceita o seu plano",
@@ -47,7 +40,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body className={`${plusJakarta.variable} antialiased`}>
+      <body className="antialiased">
         <AuthProvider>
           <ServiceWorkerRegister />
           <div className="mx-auto min-h-dvh max-w-lg pb-24 md:max-w-3xl lg:max-w-5xl">
