@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "api.dicebear.com" },
     ],
   },
+  outputFileTracingIncludes: {
+    "/*": ["./prisma/dev.db"],
+  },
 };
 
 export default nextConfig;
