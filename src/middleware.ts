@@ -2,13 +2,15 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-const publicPaths = ["/entrar", "/premium", "/manifest.webmanifest", "/sw.js"];
+const publicPaths = ["/entrar", "/premium", "/manifest.webmanifest", "/sw.js", "/api/demo-login", "/api/login"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (
     pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/api/login") ||
+    pathname.startsWith("/api/demo-login") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/icons") ||
     pathname.includes(".")

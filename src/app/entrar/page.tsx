@@ -1,13 +1,13 @@
-"use client";
-
-import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
-function LoginForm() {
-  const params = useSearchParams();
-  const callbackUrl = params.get("callbackUrl") || "/";
-  const error = params.get("error");
+export default async function EntrarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ callbackUrl?: string; error?: string }>;
+}) {
+  const sp = await searchParams;
+  const callbackUrl = sp.callbackUrl && sp.callbackUrl.startsWith("/") ? sp.callbackUrl : "/";
+  const hasError = sp.error != null;
 
   return (
     <main className="flex min-h-dvh flex-col px-4 pb-10 pt-10 md:px-6">
@@ -22,11 +22,20 @@ function LoginForm() {
           </p>
         </div>
 
-        {/* Form nativo POST — funciona mesmo se o JS do React não hidratar */}
+        {/* Atalho GET — funciona mesmo se cliques em botão falharem na automação */}
+        <a
+          href={`/api/demo-login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+          className="mb-4 flex w-full items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3.5 text-sm font-bold text-emerald-900 hover:bg-emerald-100"
+          data-testid="demo-login"
+        >
+          Entrar como Ana (demo)
+        </a>
+
         <form
           method="POST"
           action="/api/login"
           className="space-y-3 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"
+          data-testid="login-form"
         >
           <input type="hidden" name="callbackUrl" value={callbackUrl} />
           <label className="block text-xs font-medium text-slate-600">
@@ -51,18 +60,27 @@ function LoginForm() {
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500"
             />
           </label>
-          {error && (
-            <p className="text-sm text-rose-600">
-              E-mail ou senha incorretos. Tente de novo.
-            </p>
+          {hasError && (
+            <p className="text-sm text-rose-600">E-mail ou senha incorretos. Tente de novo.</p>
           )}
           <button
             type="submit"
             className="w-full rounded-xl bg-brand-600 py-3 text-sm font-semibold text-white hover:bg-brand-700"
+            data-testid="login-submit"
           >
             Entrar
           </button>
         </form>
+
+        <p className="mt-3 text-center text-xs text-slate-500">
+          Ou{" "}
+          <a
+            className="font-semibold text-brand-700 underline"
+            href={`/api/demo-login?role=admin&callbackUrl=${encodeURIComponent(callbackUrl)}`}
+          >
+            entrar como admin
+          </a>
+        </p>
 
         <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-xs text-slate-600">
           <p className="font-semibold text-slate-800">Contas demo</p>
@@ -80,13 +98,5 @@ function LoginForm() {
         </p>
       </div>
     </main>
-  );
-}
-
-export default function EntrarPage() {
-  return (
-    <Suspense fallback={<div className="p-6 text-sm text-slate-500">Carregando…</div>}>
-      <LoginForm />
-    </Suspense>
   );
 }
