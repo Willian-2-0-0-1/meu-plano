@@ -1,5 +1,5 @@
 import { distanceKm } from "./geo";
-import { isStale, normalizeSourceType, normalizeStatus } from "./plan-status";
+import { isStale, normalizeSourceType, normalizeStatus } from "./plan-status-helpers";
 
 export type RankableProvider = {
   id: string;

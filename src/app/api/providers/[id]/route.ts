@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { resolveActivePlan } from "@/lib/guest-plan";
-import { normalizeSourceType, normalizeStatus } from "@/lib/plan-status";
+import { normalizeSourceType, normalizeStatus } from "@/lib/plan-status-helpers";
 
 export async function GET(
   req: NextRequest,

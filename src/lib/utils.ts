@@ -1,6 +1,10 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { freshnessLabel, normalizeSourceType, normalizeStatus } from "@/lib/plan-status";
+import {
+  freshnessLabel,
+  normalizeSourceType,
+  normalizeStatus,
+} from "@/lib/plan-status-helpers";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

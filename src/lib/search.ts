@@ -4,7 +4,7 @@ import { parseSearchQuery } from "@/lib/search-parser";
 import { rankProviders } from "@/lib/ranking";
 import { DEFAULT_LOCATION, resolveCepOrCity } from "@/lib/geo";
 import { resolveActivePlan } from "@/lib/guest-plan";
-import { isStale, normalizeSourceType, normalizeStatus } from "@/lib/plan-status";
+import { isStale, normalizeSourceType, normalizeStatus } from "@/lib/plan-status-helpers";
 
 export type SearchParamsInput = {
   q?: string;

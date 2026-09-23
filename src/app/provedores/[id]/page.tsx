@@ -9,7 +9,7 @@ import {
   sourceLabel,
   statusBadge,
 } from "@/lib/utils";
-import { normalizeSourceType, normalizeStatus } from "@/lib/plan-status";
+import { normalizeSourceType, normalizeStatus } from "@/lib/plan-status-helpers";
 import {
   ArrowLeft,
   Heart,
