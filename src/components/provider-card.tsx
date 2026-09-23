@@ -5,7 +5,7 @@ import {
   statusBadge,
   sourceLabel,
 } from "@/lib/utils";
-import { MapPin, Star, MessageCircle } from "lucide-react";
+import { MapPin, Star, MessageCircle, Users } from "lucide-react";
 
 export type ProviderCardData = {
   id: string;
@@ -19,6 +19,9 @@ export type ProviderCardData = {
   lastVerifiedAt?: string | Date | null;
   whatsapp?: string | null;
   neighborhood?: string;
+  communityAccepted?: number;
+  communityDenied?: number;
+  conflicting?: boolean;
 };
 
 type Props = {
@@ -28,19 +31,21 @@ type Props = {
   onRequestConfirm?: () => void;
 };
 
-/** Card 100% server-friendly (links <a> nativos) */
 export function ProviderCard({
   provider,
   showRequestConfirm,
   onWhatsApp,
   onRequestConfirm,
 }: Props) {
-  const badge = statusBadge(provider.planStatus ?? "unconfirmed");
+  const badge = statusBadge(provider.planStatus, provider.planSource);
   const wa = provider.whatsapp
     ? `https://wa.me/${provider.whatsapp}?text=${encodeURIComponent(
         `Olá! Encontrei vocês no Meu Plano e gostaria de agendar. Aceitam meu plano ${provider.planName ?? ""}?`
       )}`
     : null;
+
+  const communityTotal =
+    (provider.communityAccepted ?? 0) + (provider.communityDenied ?? 0);
 
   return (
     <article className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm shadow-slate-100/80">
@@ -56,8 +61,9 @@ export function ProviderCard({
             "shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold tracking-wide",
             badge.className
           )}
+          title={badge.emoji}
         >
-          {badge.label}
+          {badge.emoji} {badge.label}
         </span>
       </div>
 
@@ -78,12 +84,29 @@ export function ProviderCard({
       </div>
 
       <p className="mt-2 text-xs text-slate-500">
-        {provider.planStatus === "confirmed"
-          ? `${formatRelativeDays(provider.lastVerifiedAt)} · ${sourceLabel(provider.planSource ?? "operator")}`
-          : provider.planStatus === "not_accepted"
-            ? `Usuários reportaram que não aceita · ${formatRelativeDays(provider.lastVerifiedAt).replace("Confirmado", "Info de")}`
-            : "Aparece na rede, mas sem confirmação recente"}
+        {provider.conflicting || provider.planStatus === "conflicting" ? (
+          <span className="font-medium text-amber-800">
+            ⚠️ Informações conflitantes · {formatRelativeDays(provider.lastVerifiedAt)}
+          </span>
+        ) : provider.planStatus === "confirmed" ? (
+          `${formatRelativeDays(provider.lastVerifiedAt)} · ${sourceLabel(provider.planSource ?? "operator")}`
+        ) : provider.planStatus === "reported_not_accepting" ||
+          provider.planStatus === "not_accepted" ? (
+          `Usuários relataram que não está aceitando · ${formatRelativeDays(provider.lastVerifiedAt)}`
+        ) : provider.planStatus === "listed" ? (
+          `🔵 Consta na rede da operadora · ${formatRelativeDays(provider.lastVerifiedAt)}`
+        ) : (
+          `🟡 ${formatRelativeDays(provider.lastVerifiedAt)}`
+        )}
       </p>
+
+      {communityTotal > 0 && (
+        <p className="mt-1 inline-flex items-center gap-1 text-xs text-slate-500">
+          <Users className="h-3.5 w-3.5" />
+          Comunidade: {provider.communityAccepted ?? 0} sim · {provider.communityDenied ?? 0} não
+          <span className="text-slate-400">(relatos, não oficial)</span>
+        </p>
+      )}
 
       <div className="mt-3 flex flex-wrap gap-2">
         <a
@@ -106,15 +129,19 @@ export function ProviderCard({
         )}
       </div>
 
-      {(showRequestConfirm || onRequestConfirm) && provider.planStatus === "unconfirmed" && (
-        <a
-          href={`/provedores/${provider.id}#pedir-confirmacao`}
-          onClick={onRequestConfirm}
-          className="mt-2 block w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-sm font-medium text-amber-900 hover:bg-amber-100"
-        >
-          Pedir confirmação
-        </a>
-      )}
+      {(showRequestConfirm || onRequestConfirm) &&
+        (provider.planStatus === "listed" ||
+          provider.planStatus === "stale" ||
+          provider.planStatus === "unconfirmed" ||
+          provider.planStatus === "conflicting") && (
+          <a
+            href={`/provedores/${provider.id}#pedir-confirmacao`}
+            onClick={onRequestConfirm}
+            className="mt-2 block w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-sm font-medium text-amber-900 hover:bg-amber-100"
+          >
+            {provider.planStatus === "conflicting" ? "Confirmar situação" : "Pedir confirmação"}
+          </a>
+        )}
     </article>
   );
 }

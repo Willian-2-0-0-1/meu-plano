@@ -65,6 +65,14 @@ function OnboardingInner() {
     e.preventDefault();
     if (!planId) return;
     setLoading(true);
+
+    // Sempre salva cookie de visitante
+    await fetch("/api/guest-plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ healthPlanId: planId }),
+    });
+
     const res = await fetch("/api/plans", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -77,6 +85,12 @@ function OnboardingInner() {
       }),
     });
     setLoading(false);
+    if (res.status === 401) {
+      // Visitante: cookie já basta
+      router.push("/");
+      router.refresh();
+      return;
+    }
     if (!res.ok) {
       const data = await res.json();
       setMsg(data.error || "Erro ao salvar plano.");

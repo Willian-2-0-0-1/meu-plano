@@ -13,6 +13,10 @@ export default async function BuscarPage({
     acceptsPlan?: string;
     includeUnconfirmed?: string;
     place?: string;
+    planId?: string;
+    locationMode?: string;
+    lat?: string;
+    lng?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -27,13 +31,19 @@ export default async function BuscarPage({
     acceptsPlan: sp.acceptsPlan,
     includeUnconfirmed: sp.includeUnconfirmed ?? "1",
     place: sp.place,
+    planId: sp.planId,
+    locationMode: sp.locationMode,
+    lat: sp.lat,
+    lng: sp.lng,
   });
+
+  const planQs = sp.planId ? `&planId=${encodeURIComponent(sp.planId)}` : "";
 
   return (
     <main className="px-4 pb-8 pt-6 md:px-6">
       <h1 className="text-xl font-extrabold text-slate-900">Buscar atendimento</h1>
       <p className="mt-1 text-sm text-slate-600">
-        Digite naturalmente, como “Dermatologista perto de mim”.
+        Digite naturalmente, como “Dermatologista perto de mim”. Sem login obrigatório.
       </p>
 
       <form method="GET" action="/buscar" className="mt-4 space-y-2">
@@ -55,6 +65,7 @@ export default async function BuscarPage({
           </button>
         </div>
         {sp.type ? <input type="hidden" name="type" value={sp.type} /> : null}
+        {sp.planId ? <input type="hidden" name="planId" value={sp.planId} /> : null}
         <div className="flex flex-wrap gap-2 text-xs">
           {[
             { d: "5", label: "5 km" },
@@ -63,7 +74,7 @@ export default async function BuscarPage({
           ].map(({ d, label }) => (
             <a
               key={d}
-              href={`/buscar?q=${encodeURIComponent(q)}&distance=${d}${sp.type ? `&type=${sp.type}` : ""}`}
+              href={`/buscar?q=${encodeURIComponent(q)}&distance=${d}${sp.type ? `&type=${sp.type}` : ""}${planQs}`}
               className={`rounded-full border px-3 py-1.5 font-medium ${
                 distance === d
                   ? "border-brand-600 bg-brand-600 text-white"
@@ -74,24 +85,32 @@ export default async function BuscarPage({
             </a>
           ))}
           <a
-            href={`/buscar?q=${encodeURIComponent(q)}&distance=${distance}&acceptsPlan=1`}
+            href={`/buscar?q=${encodeURIComponent(q)}&distance=${distance}&acceptsPlan=1${planQs}`}
             className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 font-medium text-emerald-800"
           >
             Só quem aceita
           </a>
           <a
-            href={`/buscar?q=${encodeURIComponent(q)}&distance=25&includeUnconfirmed=1`}
+            href={`/buscar?q=${encodeURIComponent(q)}&distance=25&includeUnconfirmed=1${planQs}`}
             className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 font-medium text-amber-900"
           >
-            Incluir não confirmados
+            Incluir listados
           </a>
         </div>
       </form>
 
-      {meta.activePlanName && (
+      {meta.activePlanName ? (
         <p className="mt-3 text-xs text-slate-500">
           Resultados para o plano <strong className="text-slate-700">{meta.activePlanName}</strong>
           {results.length > 0 ? ` · ${results.length} locais` : ""}
+        </p>
+      ) : (
+        <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          Nenhum plano selecionado.{" "}
+          <a href="/" className="font-semibold underline">
+            Escolha seu plano na home
+          </a>{" "}
+          para ver status de aceitação.
         </p>
       )}
 
@@ -99,11 +118,11 @@ export default async function BuscarPage({
         <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center">
           <h3 className="text-base font-semibold text-slate-900">Nenhum resultado por perto</h3>
           <p className="mt-1 text-sm text-slate-500">
-            Tente ampliar a busca ou incluir locais ainda não confirmados.
+            Tente ampliar a busca ou incluir locais ainda listados na rede.
           </p>
           <div className="mt-4 flex flex-col gap-2">
             <a
-              href={`/buscar?q=${encodeURIComponent(q || "médico")}&distance=25&includeUnconfirmed=1`}
+              href={`/buscar?q=${encodeURIComponent(q || "médico")}&distance=25&includeUnconfirmed=1${planQs}`}
               className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white"
             >
               Aumentar distância
@@ -125,7 +144,7 @@ export default async function BuscarPage({
       )}
 
       <p className="mt-6 text-center text-xs text-slate-400">
-        <a href="/buscar?q=Dermatologista" className="underline">
+        <a href={`/buscar?q=Dermatologista${planQs}`} className="underline">
           Atalho demo: Dermatologista
         </a>
       </p>

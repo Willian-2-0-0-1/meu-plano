@@ -35,16 +35,42 @@ type ProviderSeed = {
   phone: string;
   whatsapp: string;
   specialties: string[];
-  plans: { operator: string; name: string; status: string; source: string; daysAgo?: number }[];
+  plans: {
+    operator: string;
+    name: string;
+    status: string;
+    source: string;
+    daysAgo?: number;
+    sourceUrl?: string;
+  }[];
   openToday?: boolean;
   description?: string;
+  documentCnpj?: string;
 };
+
+/** Mapeia status/fonte legados → modelo de proveniência */
+function mapStatus(status: string): string {
+  if (status === "unconfirmed") return "listed";
+  if (status === "not_accepted") return "reported_not_accepting";
+  return status;
+}
+
+function mapSource(source: string): string {
+  if (source === "user") return "community";
+  return source;
+}
 
 async function main() {
   console.log("Limpando banco...");
   await prisma.whatsAppClick.deleteMany();
   await prisma.searchEvent.deleteMany();
   await prisma.favorite.deleteMany();
+  await prisma.commentReport.deleteMany();
+  await prisma.profileClaim.deleteMany();
+  await prisma.providerExperience.deleteMany();
+  await prisma.providerPlanHistory.deleteMany();
+  await prisma.crawlerRawResult.deleteMany();
+  await prisma.crawlerRun.deleteMany();
   await prisma.verificationRequest.deleteMany();
   await prisma.confirmation.deleteMany();
   await prisma.providerPlan.deleteMany();
@@ -162,12 +188,14 @@ async function main() {
       phone: "11987651001",
       whatsapp: "5511987651001",
       specialties: ["Dermatologia", "Clínica Geral"],
+      documentCnpj: "12.345.678/0001-90",
       plans: [
         { operator: "SulAmérica", name: "Especial 100", status: "confirmed", source: "clinic", daysAgo: 3 },
         { operator: "Unimed", name: "Unimed Nacional", status: "confirmed", source: "operator", daysAgo: 12 },
-        { operator: "Amil", name: "Amil 400", status: "unconfirmed", source: "operator" },
+        { operator: "Amil", name: "Amil 400", status: "listed", source: "operator" },
+        { operator: "SulAmérica", name: "Exato", status: "listed", source: "operator", daysAgo: 20 },
       ],
-      description: "Clínica multiprofissional com foco em dermatologia e clínica geral.",
+      description: "Clínica multiprofissional com foco em dermatologia e clínica geral. [MOCK]",
     },
     {
       name: "Centro Médico Paulista",
@@ -200,10 +228,51 @@ async function main() {
       whatsapp: "5511987651003",
       specialties: ["Dermatologia", "Ginecologia"],
       plans: [
-        { operator: "SulAmérica", name: "Especial 100", status: "unconfirmed", source: "operator" },
+        { operator: "SulAmérica", name: "Especial 100", status: "listed", source: "operator", daysAgo: 60 },
         { operator: "Hapvida", name: "Hapvida Pleno", status: "confirmed", source: "clinic", daysAgo: 20 },
       ],
-      description: "Atendimento acolhedor; credenciamento em atualização.",
+      description: "Atendimento acolhedor; informação antiga na rede (stale). [MOCK]",
+    },
+    // Conflito: operadora lista, comunidade nega
+    {
+      name: "Clínica Conflito Demo",
+      type: "clinica",
+      neighborhood: "Itaim Bibi",
+      address: "Rua João Cachoeira, 500 — Itaim Bibi",
+      lat: -23.5842,
+      lng: -46.6778,
+      rating: 4.1,
+      reviewCount: 44,
+      phone: "11987651999",
+      whatsapp: "5511987651999",
+      specialties: ["Dermatologia", "Clínica Geral"],
+      plans: [
+        {
+          operator: "SulAmérica",
+          name: "Especial 100",
+          status: "conflicting",
+          source: "operator",
+          daysAgo: 2,
+          sourceUrl: "https://mock.meuplano.local/conflito",
+        },
+      ],
+      description: "[MOCK] Oficial na rede + relatos de que não aceita — conflito explícito.",
+    },
+    // Sem info recente
+    {
+      name: "Consultório Sem Atualização",
+      type: "medico",
+      neighborhood: "Paraíso",
+      address: "Rua Vergueiro, 1000 — Paraíso",
+      lat: -23.5745,
+      lng: -46.6412,
+      rating: 4.0,
+      reviewCount: 12,
+      phone: "11987651998",
+      whatsapp: "5511987651998",
+      specialties: ["Dermatologia"],
+      plans: [],
+      description: "[MOCK] Sem informação recente de plano.",
     },
     {
       name: "DermaCare Jardins",
@@ -660,6 +729,7 @@ async function main() {
         photoUrl: `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(p.name)}`,
         phone: p.phone,
         whatsapp: p.whatsapp,
+        documentCnpj: p.documentCnpj ?? null,
         address: p.address,
         neighborhood: p.neighborhood,
         city: "São Paulo",
@@ -685,21 +755,54 @@ async function main() {
     for (const pl of p.plans) {
       const plan = plans.find((x) => x.operator === pl.operator && x.name === pl.name);
       if (!plan) continue;
+      const status = mapStatus(pl.status);
+      const sourceType = mapSource(pl.source);
+      const checked =
+        pl.daysAgo !== undefined
+          ? daysAgo(pl.daysAgo)
+          : status === "confirmed"
+            ? daysAgo(7)
+            : null;
       await prisma.providerPlan.create({
         data: {
           providerId: provider.id,
           healthPlanId: plan.id,
-          status: pl.status,
+          status,
           source: pl.source,
-          lastVerifiedAt:
-            pl.daysAgo !== undefined ? daysAgo(pl.daysAgo) : pl.status === "confirmed" ? daysAgo(7) : null,
+          sourceType,
+          sourceUrl: pl.sourceUrl ?? null,
+          sourceName:
+            sourceType === "operator"
+              ? "Rede mock da operadora"
+              : sourceType === "clinic"
+                ? "Confirmação da clínica"
+                : sourceType === "community"
+                  ? "Relato da comunidade"
+                  : "Admin",
+          confidence:
+            status === "confirmed" ? 0.85 : status === "listed" ? 0.65 : 0.45,
+          lastCheckedAt: checked,
+          lastVerifiedAt: status === "confirmed" ? checked : null,
+        },
+      });
+      await prisma.providerPlanHistory.create({
+        data: {
+          providerId: provider.id,
+          healthPlanId: plan.id,
+          previousStatus: null,
+          newStatus: status,
+          sourceType,
+          sourceUrl: pl.sourceUrl ?? null,
+          observedAt: checked ?? new Date(),
+          note: "Seed inicial [MOCK]",
         },
       });
     }
   }
 
-  // Sample confirmation from demo user
+  // Sample confirmation + experiência from demo user
   const saudeMais = await prisma.provider.findFirst({ where: { name: "Clínica Saúde Mais" } });
+  const derm = specialtyMap.get("Dermatologia");
   if (saudeMais) {
     await prisma.confirmation.create({
       data: {
@@ -710,8 +813,64 @@ async function main() {
         createdAt: daysAgo(3),
       },
     });
+    await prisma.providerExperience.create({
+      data: {
+        userId: demoUser.id,
+        providerId: saudeMais.id,
+        healthPlanId: sulamericaEspecial.id,
+        specialtyId: derm,
+        accepted: true,
+        experienceDate: daysAgo(3),
+        comment: "Atendimento ok com Especial 100 na dermatologia. [MOCK]",
+        createdAt: daysAgo(3),
+      },
+    });
     await prisma.favorite.create({
       data: { userId: demoUser.id, providerId: saudeMais.id },
+    });
+  }
+
+  // Comunidade negando no conflito demo (oficial vs comunidade)
+  const conflito = await prisma.provider.findFirst({ where: { name: "Clínica Conflito Demo" } });
+  if (conflito) {
+    await prisma.providerExperience.create({
+      data: {
+        userId: demoUser.id,
+        providerId: conflito.id,
+        healthPlanId: sulamericaEspecial.id,
+        specialtyId: derm,
+        accepted: false,
+        experienceDate: daysAgo(1),
+        comment: "Fui e disseram que não aceitam mais Especial 100. [MOCK]",
+        createdAt: daysAgo(1),
+      },
+    });
+    await prisma.providerPlanHistory.create({
+      data: {
+        providerId: conflito.id,
+        healthPlanId: sulamericaEspecial.id,
+        previousStatus: "listed",
+        newStatus: "conflicting",
+        sourceType: "community",
+        observedAt: daysAgo(1),
+        note: "Conflito: operadora lista vs comunidade nega [MOCK]",
+      },
+    });
+  }
+
+  // Oficial + negando (DermaCare)
+  const dermaCare = await prisma.provider.findFirst({ where: { name: "DermaCare Jardins" } });
+  if (dermaCare) {
+    await prisma.providerExperience.create({
+      data: {
+        userId: demoUser.id,
+        providerId: dermaCare.id,
+        healthPlanId: sulamericaEspecial.id,
+        accepted: false,
+        experienceDate: daysAgo(15),
+        comment: "Não aceitaram o plano. [MOCK]",
+        createdAt: daysAgo(15),
+      },
     });
   }
 
@@ -720,7 +879,7 @@ async function main() {
   console.log("Admin: admin@meuplano.app / admin123");
   console.log(`Provedores: ${providers.length}`);
   console.log(`Especialidades: ${specialtyDefs.length}`);
-  void haversineKm; // keep helper available for future seed ranking checks
+  void haversineKm;
   void adminUser;
 }
 

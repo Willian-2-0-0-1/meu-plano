@@ -12,14 +12,9 @@ type AdminData = {
     type: string;
     neighborhood: string;
     city: string;
-    latitude: number;
-    longitude: number;
-    phone: string | null;
-    whatsapp: string | null;
-    rating: number;
-    openToday: boolean;
     plans: Array<{
       status: string;
+      sourceType?: string;
       healthPlanId: string;
       healthPlan: { operator: string; name: string };
     }>;
@@ -42,15 +37,80 @@ type AdminData = {
     healthPlan: { operator: string; name: string };
     user: { name: string; email: string };
   }>;
+  experiences: Array<{
+    id: string;
+    accepted: boolean;
+    createdAt: string;
+    comment: string | null;
+    provider: { name: string };
+    healthPlan: { operator: string; name: string };
+    user: { name: string; email: string };
+  }>;
+  crawlerRuns: Array<{
+    id: string;
+    operator: string;
+    adapter: string;
+    status: string;
+    rawCount: number;
+    upserted: number;
+    errorsJson: string;
+    startedAt: string;
+    finishedAt: string | null;
+    note: string | null;
+  }>;
+  conflicts: Array<{
+    id: string;
+    status: string;
+    notes: string | null;
+    provider: { name: string };
+    healthPlan: { operator: string; name: string };
+  }>;
+  reports: Array<{
+    id: string;
+    reason: string;
+    status: string;
+    targetType: string;
+    targetId: string;
+    createdAt: string;
+    user: { name: string; email: string };
+  }>;
+  claims: Array<{
+    id: string;
+    status: string;
+    message: string | null;
+    createdAt: string;
+    provider: { name: string };
+    user: { name: string; email: string };
+  }>;
+  history: Array<{
+    id: string;
+    previousStatus: string | null;
+    newStatus: string;
+    sourceType: string;
+    observedAt: string;
+    provider: { name: string };
+    healthPlan: { operator: string; name: string };
+  }>;
+  crawlerAdapters: Array<{ id: string; operator: string }>;
 };
+
+type Tab =
+  | "providers"
+  | "plans"
+  | "specialties"
+  | "requests"
+  | "confirmations"
+  | "crawlers"
+  | "conflicts"
+  | "reports"
+  | "claims"
+  | "history";
 
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [data, setData] = useState<AdminData | null>(null);
-  const [tab, setTab] = useState<"providers" | "plans" | "specialties" | "requests" | "confirmations">(
-    "providers"
-  );
+  const [tab, setTab] = useState<Tab>("providers");
   const [msg, setMsg] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "",
@@ -69,7 +129,7 @@ export default function AdminPage() {
     providerId: "",
     healthPlanId: "",
     status: "confirmed",
-    source: "operator",
+    sourceType: "manual_admin",
   });
 
   async function load() {
@@ -119,13 +179,18 @@ export default function AdminPage() {
     );
   }
 
-  const tabs = [
+  const tabs: [Tab, string][] = [
     ["providers", "Clínicas"],
     ["plans", "Planos"],
     ["specialties", "Especialidades"],
+    ["crawlers", "Crawlers"],
+    ["conflicts", "Conflitos"],
+    ["history", "Alterações"],
     ["requests", "Verificações"],
-    ["confirmations", "Confirmações"],
-  ] as const;
+    ["confirmations", "Experiências"],
+    ["reports", "Denúncias"],
+    ["claims", "Reivindicações"],
+  ];
 
   return (
     <main className="px-4 pb-10 pt-6 md:px-6">
@@ -213,7 +278,7 @@ export default function AdminPage() {
           </form>
 
           <div className="space-y-2 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold">Definir aceitação de plano</h2>
+            <h2 className="text-sm font-semibold">Definir status de plano (com histórico)</h2>
             <select
               value={linkForm.providerId}
               onChange={(e) => setLinkForm((f) => ({ ...f, providerId: e.target.value }))}
@@ -241,14 +306,39 @@ export default function AdminPage() {
               onChange={(e) => setLinkForm((f) => ({ ...f, status: e.target.value }))}
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
             >
-              <option value="confirmed">confirmed</option>
-              <option value="unconfirmed">unconfirmed</option>
-              <option value="not_accepted">not_accepted</option>
+              {[
+                "confirmed",
+                "listed",
+                "reported_not_accepting",
+                "not_found",
+                "conflicting",
+                "stale",
+              ].map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <select
+              value={linkForm.sourceType}
+              onChange={(e) => setLinkForm((f) => ({ ...f, sourceType: e.target.value }))}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            >
+              {["manual_admin", "operator", "clinic", "community"].map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
             </select>
             <button
               type="button"
               className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white"
-              onClick={() => void adminAction({ action: "setProviderPlan", data: linkForm })}
+              onClick={() =>
+                void adminAction({
+                  action: "setProviderPlan",
+                  data: { ...linkForm, force: true },
+                })
+              }
             >
               Salvar status
             </button>
@@ -390,6 +480,76 @@ export default function AdminPage() {
         </div>
       )}
 
+      {tab === "crawlers" && (
+        <div className="mt-4 space-y-4">
+          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+            <h2 className="text-sm font-semibold">Rodar crawler MOCK</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Dados fictícios — sem scrapers reais. Pipeline: raw → normalize → dedupe → status → histórico.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {data.crawlerAdapters.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  className="rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white"
+                  onClick={() => void adminAction({ action: "runCrawler", adapter: a.id })}
+                >
+                  {a.operator}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ul className="space-y-2">
+            {data.crawlerRuns.map((r) => (
+              <li key={r.id} className="rounded-xl bg-white p-3 text-sm shadow-sm">
+                <p className="font-medium">
+                  {r.adapter} · {r.status}
+                </p>
+                <p className="text-xs text-slate-500">
+                  raw {r.rawCount} · upserted {r.upserted} ·{" "}
+                  {new Date(r.startedAt).toLocaleString("pt-BR")}
+                </p>
+                {r.errorsJson !== "[]" && (
+                  <p className="mt-1 text-xs text-rose-600">{r.errorsJson}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {tab === "conflicts" && (
+        <ul className="mt-4 space-y-2">
+          {data.conflicts.length === 0 && (
+            <li className="text-sm text-slate-500">Nenhum conflito aberto.</li>
+          )}
+          {data.conflicts.map((c) => (
+            <li key={c.id} className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+              <p className="font-medium">{c.provider.name}</p>
+              <p className="text-xs text-slate-600">
+                {c.healthPlan.operator} {c.healthPlan.name}
+              </p>
+              {c.notes && <p className="mt-1 text-xs">{c.notes}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {tab === "history" && (
+        <ul className="mt-4 space-y-2">
+          {data.history.map((h) => (
+            <li key={h.id} className="rounded-xl bg-white p-3 text-sm shadow-sm">
+              <p className="font-medium">{h.provider.name}</p>
+              <p className="text-xs text-slate-500">
+                {h.healthPlan.operator} {h.healthPlan.name}: {h.previousStatus ?? "—"} → {h.newStatus} (
+                {h.sourceType}) · {new Date(h.observedAt).toLocaleString("pt-BR")}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+
       {tab === "requests" && (
         <ul className="mt-4 space-y-2">
           {data.verificationRequests.map((r) => (
@@ -419,13 +579,71 @@ export default function AdminPage() {
 
       {tab === "confirmations" && (
         <ul className="mt-4 space-y-2">
-          {data.confirmations.map((c) => (
+          {(data.experiences?.length ? data.experiences : []).map((c) => (
             <li key={c.id} className="rounded-xl bg-white p-3 text-sm shadow-sm">
               <p className="font-medium">{c.provider.name}</p>
               <p className="text-xs text-slate-500">
-                {c.user.name} · {c.answer} · {c.healthPlan.operator} {c.healthPlan.name} ·{" "}
-                {new Date(c.createdAt).toLocaleString("pt-BR")}
+                {c.user.name} · {c.accepted ? "SIM" : "NÃO"} · {c.healthPlan.operator}{" "}
+                {c.healthPlan.name} · {new Date(c.createdAt).toLocaleString("pt-BR")}
               </p>
+              {c.comment && <p className="mt-1 text-xs text-slate-600">{c.comment}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {tab === "reports" && (
+        <ul className="mt-4 space-y-2">
+          {data.reports.map((r) => (
+            <li key={r.id} className="rounded-xl bg-white p-3 text-sm shadow-sm">
+              <p className="font-medium">
+                {r.reason} · {r.status}
+              </p>
+              <p className="text-xs text-slate-500">
+                {r.targetType}/{r.targetId} · {r.user.name}
+              </p>
+              <div className="mt-2 flex gap-2">
+                {["pending", "reviewed", "dismissed"].map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    className="rounded-lg border px-2 py-1 text-[11px]"
+                    onClick={() =>
+                      void adminAction({ action: "updateReport", id: r.id, status: st })
+                    }
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {tab === "claims" && (
+        <ul className="mt-4 space-y-2">
+          {data.claims.map((c) => (
+            <li key={c.id} className="rounded-xl bg-white p-3 text-sm shadow-sm">
+              <p className="font-medium">{c.provider.name}</p>
+              <p className="text-xs text-slate-500">
+                {c.user.name} · {c.status}
+              </p>
+              {c.message && <p className="mt-1 text-xs">{c.message}</p>}
+              <div className="mt-2 flex gap-2">
+                {["pending", "approved", "rejected"].map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    className="rounded-lg border px-2 py-1 text-[11px]"
+                    onClick={() =>
+                      void adminAction({ action: "updateClaim", id: c.id, status: st })
+                    }
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
             </li>
           ))}
         </ul>

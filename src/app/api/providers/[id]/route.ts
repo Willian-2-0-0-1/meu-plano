@@ -1,23 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { resolveActivePlan } from "@/lib/guest-plan";
+import { normalizeSourceType, normalizeStatus } from "@/lib/plan-status";
 
 export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  req: NextRequest,
+  ctx: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
+  const { id } = await ctx.params;
   const session = await auth();
+  const planIdParam = req.nextUrl.searchParams.get("planId");
 
   const provider = await prisma.provider.findUnique({
     where: { id },
     include: {
       specialties: { include: { specialty: true } },
       plans: { include: { healthPlan: true } },
-      confirmations: {
+      planHistory: {
+        include: { healthPlan: true },
+        orderBy: { observedAt: "desc" },
+        take: 20,
+      },
+      experiences: {
+        include: {
+          user: { select: { name: true } },
+          healthPlan: true,
+          specialty: true,
+        },
         orderBy: { createdAt: "desc" },
-        take: 10,
-        include: { healthPlan: true, user: { select: { name: true } } },
+        take: 30,
       },
     },
   });
@@ -27,33 +39,36 @@ export async function GET(
   }
 
   let activePlanId: string | null = null;
-  let favorited = false;
   if (session?.user?.id) {
     const up = await prisma.userPlan.findFirst({
       where: { userId: session.user.id, isActive: true },
     });
     activePlanId = up?.healthPlanId ?? null;
-    const fav = await prisma.favorite.findUnique({
-      where: {
-        userId_providerId: { userId: session.user.id, providerId: id },
-      },
-    });
-    favorited = Boolean(fav);
+  }
+  if (!activePlanId) {
+    const resolved = await resolveActivePlan({ planId: planIdParam });
+    activePlanId = resolved.healthPlanId;
   }
 
-  const planForUser = activePlanId
+  const activePlan = activePlanId
     ? provider.plans.find((p) => p.healthPlanId === activePlanId)
     : null;
 
   return NextResponse.json({
     provider: {
       ...provider,
-      hours: JSON.parse(provider.hoursJson || "{}"),
-      specialties: provider.specialties.map((s) => s.specialty),
-      userPlanStatus: planForUser?.status ?? null,
-      userPlanSource: planForUser?.source ?? null,
-      userPlanVerifiedAt: planForUser?.lastVerifiedAt ?? null,
-      favorited,
+      plans: provider.plans.map((p) => ({
+        ...p,
+        status: normalizeStatus(p.status),
+        sourceType: normalizeSourceType(p.sourceType || p.source),
+      })),
     },
+    activePlan: activePlan
+      ? {
+          ...activePlan,
+          status: normalizeStatus(activePlan.status),
+          sourceType: normalizeSourceType(activePlan.sourceType || activePlan.source),
+        }
+      : null,
   });
 }

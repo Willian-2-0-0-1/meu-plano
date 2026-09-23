@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { freshnessLabel, normalizeSourceType, normalizeStatus } from "@/lib/plan-status";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -12,27 +13,20 @@ export function formatDistance(km: number | null | undefined): string {
 }
 
 export function formatRelativeDays(date: Date | string | null | undefined): string {
-  if (!date) return "Sem confirmação recente";
-  const d = typeof date === "string" ? new Date(date) : date;
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (days <= 0) return "Confirmado hoje";
-  if (days === 1) return "Confirmado há 1 dia";
-  if (days < 30) return `Confirmado há ${days} dias`;
-  const months = Math.floor(days / 30);
-  if (months === 1) return "Confirmado há 1 mês";
-  return `Confirmado há ${months} meses`;
+  return freshnessLabel(date);
 }
 
 export function sourceLabel(source: string): string {
-  switch (source) {
+  const t = normalizeSourceType(source);
+  switch (t) {
     case "clinic":
       return "Confirmado pela clínica";
-    case "user":
+    case "community":
       return "Confirmado por usuários";
     case "operator":
       return "Rede da operadora";
+    case "manual_admin":
+      return "Cadastro manual";
     default:
       return "Fonte desconhecida";
   }
@@ -50,33 +44,94 @@ export function providerTypeLabel(type: string): string {
   return map[type] ?? type;
 }
 
-export function statusBadge(status: string) {
-  switch (status) {
-    case "confirmed":
-      return {
-        label: "ACEITA SEU PLANO",
-        className: "bg-emerald-50 text-emerald-700 border-emerald-200",
-        color: "green" as const,
-      };
-    case "unconfirmed":
-      return {
-        label: "PRECISA CONFIRMAR",
-        className: "bg-amber-50 text-amber-800 border-amber-200",
-        color: "yellow" as const,
-      };
-    case "not_accepted":
-      return {
-        label: "NÃO ACEITA",
-        className: "bg-rose-50 text-rose-700 border-rose-200",
-        color: "red" as const,
-      };
-    default:
-      return {
-        label: "SEM INFO",
-        className: "bg-slate-50 text-slate-600 border-slate-200",
-        color: "yellow" as const,
-      };
+export type ProvenanceBadge = {
+  label: string;
+  className: string;
+  color: "green" | "blue" | "yellow" | "red" | "amber";
+  emoji: string;
+};
+
+/** Proveniência visual da spec §8 */
+export function statusBadge(status: string | null | undefined, source?: string | null): ProvenanceBadge {
+  const s = normalizeStatus(status);
+  const src = normalizeSourceType(source ?? undefined);
+
+  if (s === "conflicting") {
+    return {
+      label: "INFORMAÇÕES CONFLITANTES",
+      className: "bg-amber-50 text-amber-900 border-amber-300",
+      color: "amber",
+      emoji: "⚠️",
+    };
   }
+
+  if (s === "confirmed") {
+    if (src === "clinic") {
+      return {
+        label: "CONFIRMADO PELA CLÍNICA",
+        className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        color: "green",
+        emoji: "🟢",
+      };
+    }
+    if (src === "community") {
+      return {
+        label: "CONFIRMADO POR USUÁRIOS",
+        className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        color: "green",
+        emoji: "🟢",
+      };
+    }
+    return {
+      label: "ACEITA SEU PLANO",
+      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      color: "green",
+      emoji: "🟢",
+    };
+  }
+
+  if (s === "listed") {
+    return {
+      label: "CONSTA NA REDE",
+      className: "bg-sky-50 text-sky-800 border-sky-200",
+      color: "blue",
+      emoji: "🔵",
+    };
+  }
+
+  if (s === "stale") {
+    return {
+      label: "NÃO VERIFICADA RECENTEMENTE",
+      className: "bg-amber-50 text-amber-800 border-amber-200",
+      color: "yellow",
+      emoji: "🟡",
+    };
+  }
+
+  if (s === "reported_not_accepting") {
+    return {
+      label: "RELATARAM QUE NÃO ACEITA",
+      className: "bg-rose-50 text-rose-700 border-rose-200",
+      color: "red",
+      emoji: "🔴",
+    };
+  }
+
+  if (s === "not_found") {
+    return {
+      label: "NÃO ENCONTRADO NA REDE",
+      className: "bg-slate-50 text-slate-600 border-slate-200",
+      color: "yellow",
+      emoji: "🟡",
+    };
+  }
+
+  return {
+    label: "SEM INFO RECENTE",
+    className: "bg-slate-50 text-slate-600 border-slate-200",
+    color: "yellow",
+    emoji: "🟡",
+  };
 }
 
 export const OPERATORS = [
@@ -96,4 +151,13 @@ export const SHORTCUTS = [
   { label: "Hospitais", query: "hospital", type: "hospital", icon: "Hospital" },
   { label: "Pronto atendimento", query: "pronto atendimento", type: "pronto_atendimento", icon: "Ambulance" },
   { label: "Terapias", query: "terapia", type: "terapia", icon: "HeartPulse" },
+] as const;
+
+export const REPORT_REASONS = [
+  { id: "spam", label: "Spam" },
+  { id: "ofensa", label: "Ofensa" },
+  { id: "info_pessoal", label: "Informação pessoal" },
+  { id: "info_medica", label: "Informação médica sensível" },
+  { id: "falsa", label: "Informação falsa" },
+  { id: "outro", label: "Outro" },
 ] as const;
