@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Heart, Home, Search, User } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -12,6 +11,7 @@ const items = [
   { href: "/perfil", label: "Perfil", icon: User },
 ];
 
+/** Usa <a> nativo (não next/link) para navegação funcionar sem hidratação */
 export function BottomNav() {
   const pathname = usePathname();
   const hide =
@@ -30,7 +30,7 @@ export function BottomNav() {
               ? pathname === "/"
               : pathname === href || pathname.startsWith(`${href}/`);
           return (
-            <Link
+            <a
               key={href}
               href={href}
               className={cn(
@@ -38,12 +38,9 @@ export function BottomNav() {
                 active ? "text-brand-600" : "text-slate-500 hover:text-slate-800"
               )}
             >
-              <Icon
-                className={cn("h-5 w-5", active && "stroke-[2.5px]")}
-                aria-hidden
-              />
+              <Icon className={cn("h-5 w-5", active && "stroke-[2.5px]")} aria-hidden />
               {label}
-            </Link>
+            </a>
           );
         })}
       </div>

@@ -1,6 +1,11 @@
-import { cn, formatDistance, formatRelativeDays, statusBadge, sourceLabel } from "@/lib/utils";
+import {
+  cn,
+  formatDistance,
+  formatRelativeDays,
+  statusBadge,
+  sourceLabel,
+} from "@/lib/utils";
 import { MapPin, Star, MessageCircle } from "lucide-react";
-import Link from "next/link";
 
 export type ProviderCardData = {
   id: string;
@@ -18,12 +23,11 @@ export type ProviderCardData = {
 
 type Props = {
   provider: ProviderCardData;
-  onWhatsApp?: () => void;
-  onRequestConfirm?: () => void;
-  compact?: boolean;
+  showRequestConfirm?: boolean;
 };
 
-export function ProviderCard({ provider, onWhatsApp, onRequestConfirm, compact }: Props) {
+/** Card 100% server-friendly (links <a> nativos) */
+export function ProviderCard({ provider, showRequestConfirm }: Props) {
   const badge = statusBadge(provider.planStatus ?? "unconfirmed");
   const wa = provider.whatsapp
     ? `https://wa.me/${provider.whatsapp}?text=${encodeURIComponent(
@@ -32,12 +36,7 @@ export function ProviderCard({ provider, onWhatsApp, onRequestConfirm, compact }
     : null;
 
   return (
-    <article
-      className={cn(
-        "rounded-2xl border border-slate-100 bg-white p-4 shadow-sm shadow-slate-100/80",
-        compact && "p-3"
-      )}
-    >
+    <article className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm shadow-slate-100/80">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-base font-semibold text-slate-900">{provider.name}</h3>
@@ -80,19 +79,18 @@ export function ProviderCard({ provider, onWhatsApp, onRequestConfirm, compact }
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <Link
+        <a
           href={`/provedores/${provider.id}`}
-          className="inline-flex flex-1 items-center justify-center rounded-xl bg-brand-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 min-w-[120px]"
+          className="inline-flex min-w-[120px] flex-1 items-center justify-center rounded-xl bg-brand-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
         >
           Ver detalhes
-        </Link>
+        </a>
         {wa && (
           <a
             href={wa}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={onWhatsApp}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 min-w-[120px]"
+            className="inline-flex min-w-[120px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
           >
             <MessageCircle className="h-4 w-4" />
             WhatsApp
@@ -100,14 +98,13 @@ export function ProviderCard({ provider, onWhatsApp, onRequestConfirm, compact }
         )}
       </div>
 
-      {provider.planStatus === "unconfirmed" && onRequestConfirm && (
-        <button
-          type="button"
-          onClick={onRequestConfirm}
-          className="mt-2 w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100"
+      {showRequestConfirm && provider.planStatus === "unconfirmed" && (
+        <a
+          href={`/provedores/${provider.id}#pedir-confirmacao`}
+          className="mt-2 block w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-sm font-medium text-amber-900 hover:bg-amber-100"
         >
           Pedir confirmação
-        </button>
+        </a>
       )}
     </article>
   );
