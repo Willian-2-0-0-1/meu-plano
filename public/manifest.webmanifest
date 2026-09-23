@@ -1,0 +1,33 @@
+{
+  "name": "Meu Plano",
+  "short_name": "Meu Plano",
+  "description": "Encontre quem realmente atende o seu plano de saúde, sem precisar ligar.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f8fc",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["health", "medical", "lifestyle"],
+  "screenshots": []
+}
