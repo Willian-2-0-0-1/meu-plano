@@ -24,10 +24,17 @@ export type ProviderCardData = {
 type Props = {
   provider: ProviderCardData;
   showRequestConfirm?: boolean;
+  onWhatsApp?: () => void;
+  onRequestConfirm?: () => void;
 };
 
 /** Card 100% server-friendly (links <a> nativos) */
-export function ProviderCard({ provider, showRequestConfirm }: Props) {
+export function ProviderCard({
+  provider,
+  showRequestConfirm,
+  onWhatsApp,
+  onRequestConfirm,
+}: Props) {
   const badge = statusBadge(provider.planStatus ?? "unconfirmed");
   const wa = provider.whatsapp
     ? `https://wa.me/${provider.whatsapp}?text=${encodeURIComponent(
@@ -90,6 +97,7 @@ export function ProviderCard({ provider, showRequestConfirm }: Props) {
             href={wa}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={onWhatsApp}
             className="inline-flex min-w-[120px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
           >
             <MessageCircle className="h-4 w-4" />
@@ -98,9 +106,10 @@ export function ProviderCard({ provider, showRequestConfirm }: Props) {
         )}
       </div>
 
-      {showRequestConfirm && provider.planStatus === "unconfirmed" && (
+      {(showRequestConfirm || onRequestConfirm) && provider.planStatus === "unconfirmed" && (
         <a
           href={`/provedores/${provider.id}#pedir-confirmacao`}
+          onClick={onRequestConfirm}
           className="mt-2 block w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-sm font-medium text-amber-900 hover:bg-amber-100"
         >
           Pedir confirmação
