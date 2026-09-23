@@ -19,9 +19,12 @@ export async function middleware(req: NextRequest) {
   }
 
   const isPublic = publicPaths.some((p) => pathname === p || pathname.startsWith(p + "/"));
+  const secureCookie =
+    req.nextUrl.protocol === "https:" || process.env.NODE_ENV === "production";
   const token = await getToken({
     req,
     secret: process.env.AUTH_SECRET,
+    secureCookie,
   });
 
   if (!token && !isPublic && !pathname.startsWith("/api/")) {
