@@ -15,7 +15,9 @@ import type {
 } from "../../crawlers/types";
 import { UNIMED_CAMPINAS } from "../../crawlers/unimed-campinas";
 
-const MISS_THRESHOLD = Number(process.env.CRAWLER_MISS_THRESHOLD ?? 3);
+import { evaluateMiss, DEFAULT_MISS_THRESHOLD } from "../../crawlers/misses";
+
+const MISS_THRESHOLD = Number(process.env.CRAWLER_MISS_THRESHOLD ?? DEFAULT_MISS_THRESHOLD);
 
 export type PipelineStats = {
   found: number;
@@ -116,9 +118,15 @@ export async function findDuplicateProvider(
 }
 
 async function ensurePlan(row: NormalizedProviderResult, isMock: boolean) {
-  let plan = await prisma.healthPlan.findFirst({
-    where: { operator: row.operator, name: row.planName },
-  });
+  let plan =
+    (row.planAnsCode
+      ? await prisma.healthPlan.findFirst({
+          where: { ansCode: row.planAnsCode, operator: row.operator },
+        })
+      : null) ||
+    (await prisma.healthPlan.findFirst({
+      where: { operator: row.operator, name: row.planName },
+    }));
   if (!plan) {
     plan = await prisma.healthPlan.create({
       data: {
@@ -133,19 +141,24 @@ async function ensurePlan(row: NormalizedProviderResult, isMock: boolean) {
       where: { id: plan.id },
       data: { ansCode: row.planAnsCode },
     });
+  } else if (plan.name !== row.planName && row.planName) {
+    // Mantém o nome canônico do seed se já existir com ANS
   }
   return plan;
 }
 
 async function linkSpecialty(providerId: string, specialtyName: string | null | undefined) {
   if (!specialtyName) return;
+  const needle = specialtyName.trim();
+  const all = await prisma.specialty.findMany();
   const spec =
-    (await prisma.specialty.findFirst({
-      where: { name: { equals: specialtyName } },
-    })) ||
-    (await prisma.specialty.findFirst({
-      where: { name: { contains: specialtyName.split(" ")[0] ?? specialtyName } },
-    }));
+    all.find((s) => s.name.toLowerCase() === needle.toLowerCase()) ||
+    all.find(
+      (s) =>
+        s.name.toLowerCase().includes(needle.toLowerCase()) ||
+        needle.toLowerCase().includes(s.name.toLowerCase()) ||
+        s.keywords.toLowerCase().includes(needle.toLowerCase())
+    );
   if (!spec) return;
   await prisma.providerSpecialty.upsert({
     where: { providerId_specialtyId: { providerId, specialtyId: spec.id } },
@@ -669,16 +682,21 @@ export async function processNextCrawlerJob() {
 /**
  * Após um run completo, incrementa misses de vínculos da mesma operadora/plano
  * que não foram vistos. Só marca possibly_removed após MISS_THRESHOLD.
+ * Runs limitadas (teste) NÃO aplicam misses.
  */
 export async function applyMissesForRun(runId: string) {
   const run = await prisma.crawlerRun.findUnique({
     where: { id: runId },
     include: { rawResults: true },
   });
-  if (!run || run.isMock) return;
-  if (run.status !== "completed") return;
+  if (!run || run.isMock) return { skipped: true, reason: "mock_or_missing" };
+  if (run.status !== "completed") return { skipped: true, reason: "not_completed" };
 
+  const params = JSON.parse(run.searchParametersJson || "{}") as { limit?: number };
   const planNames = [...new Set(run.rawResults.map((r) => r.planName))];
+  let updated = 0;
+  let skippedLimited = 0;
+
   for (const planName of planNames) {
     const plan = await prisma.healthPlan.findFirst({
       where: { operator: run.operator, name: planName },
@@ -696,24 +714,31 @@ export async function applyMissesForRun(runId: string) {
 
     for (const link of links) {
       const doc = link.provider.documentCnpj;
-      if (doc && seenProviderDocs.has(doc)) continue;
-      // se o run foi limitado (teste pequeno), não aplicar misses
-      const params = JSON.parse(run.searchParametersJson || "{}") as { limit?: number };
-      if (params.limit && params.limit < 50) continue;
-
-      const misses = link.consecutiveMisses + 1;
-      let status = link.status;
-      if (misses >= MISS_THRESHOLD && status === "possibly_removed") {
-        status = "removed_from_operator_network";
-      } else if (misses >= MISS_THRESHOLD) {
-        status = "possibly_removed";
+      const seen = Boolean(doc && seenProviderDocs.has(doc));
+      const decision = evaluateMiss({
+        seenInRun: seen,
+        limit: params.limit,
+        consecutiveMisses: link.consecutiveMisses,
+        currentStatus: link.status,
+        missThreshold: MISS_THRESHOLD,
+      });
+      if (!decision.apply) {
+        if (decision.reason === "limited_run") skippedLimited += 1;
+        continue;
       }
       await prisma.providerPlan.update({
         where: { id: link.id },
-        data: { consecutiveMisses: misses, status, lastCheckedAt: new Date() },
+        data: {
+          consecutiveMisses: decision.nextMisses!,
+          status: decision.nextStatus!,
+          lastCheckedAt: new Date(),
+        },
       });
+      updated += 1;
     }
   }
+
+  return { skipped: false, updated, skippedLimited };
 }
 
 export { listAdapters, mockCrawlers as crawlers };

@@ -649,6 +649,12 @@ export default function AdminPage() {
                   {r.searchParametersJson && r.searchParametersJson !== "{}" && (
                     <p className="mt-1 text-[11px] text-slate-400">{r.searchParametersJson}</p>
                   )}
+                  {(r.recordsCreated != null || r.duplicatesDetected != null) && (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      first/last seen atualizados nos vínculos · misses só em runs completas
+                      (limit ≥ 50)
+                    </p>
+                  )}
                 </button>
                 {selectedRunId === r.id && r.rawResults && (
                   <div className="mt-2 rounded-lg bg-slate-50 p-2 text-[11px]">

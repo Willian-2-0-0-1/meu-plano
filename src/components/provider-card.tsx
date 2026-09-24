@@ -105,7 +105,9 @@ export function ProviderCard({
 
       {(provider.planSource === "operator" || provider.planSourceUrl) && (
         <p className="relative mt-1 text-xs text-slate-500">
-          Fonte oficial
+          {provider.planSourceUrl?.includes("mock.meuplano")
+            ? "Dado MOCK (teste)"
+            : "Fonte oficial"}
           {provider.lastVerifiedAt &&
           Date.now() - new Date(provider.lastVerifiedAt).getTime() < 36e5 * 24
             ? " · Atualizado hoje"
@@ -116,6 +118,11 @@ export function ProviderCard({
             planName={provider.planName}
             sourceUrl={provider.planSourceUrl}
             collectedAt={provider.lastVerifiedAt}
+            sourceLabel={
+              provider.planSourceUrl?.includes("mock.meuplano")
+                ? "Origem MOCK"
+                : "Fonte oficial"
+            }
           />
         </p>
       )}

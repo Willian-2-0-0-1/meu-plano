@@ -139,6 +139,7 @@ export function statusBadge(status: string | null | undefined, source?: string |
 }
 
 export const OPERATORS = [
+  "Unimed Campinas",
   "Unimed",
   "Bradesco Saúde",
   "SulAmérica",
