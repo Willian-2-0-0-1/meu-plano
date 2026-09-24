@@ -25,6 +25,7 @@ import {
 import { ExperienceForm } from "@/components/experience-form";
 import { ClaimProfileButton } from "@/components/claim-profile-button";
 import { ReportButton } from "@/components/report-button";
+import { SourceOriginLink } from "@/components/source-origin-link";
 
 export default async function ProviderDetailPage({
   params,
@@ -66,6 +67,8 @@ export default async function ProviderDetailPage({
   let userPlanStatus: string | null = null;
   let userPlanSource: string | null = null;
   let userPlanVerifiedAt: Date | null = null;
+  let userPlanSourceUrl: string | null = null;
+  let userPlanOperator: string | null = null;
   let planName: string | null = null;
   let activePlanId: string | null = null;
   let operatorSide: string | null = null;
@@ -97,6 +100,8 @@ export default async function ProviderDetailPage({
     userPlanStatus = normalizeStatus(plan?.status ?? null);
     userPlanSource = normalizeSourceType(plan?.sourceType || plan?.source);
     userPlanVerifiedAt = plan?.lastVerifiedAt ?? plan?.lastCheckedAt ?? null;
+    userPlanSourceUrl = plan?.sourceUrl ?? null;
+    userPlanOperator = plan?.healthPlan?.operator ?? null;
 
     const relatedHistory = provider.planHistory.filter(
       (h) => h.healthPlanId === activePlanId
@@ -201,6 +206,22 @@ export default async function ProviderDetailPage({
                   ? `Consta na rede da operadora · ${formatRelativeDays(userPlanVerifiedAt)}`
                   : "Ainda sem confirmação recente para o seu plano."}
           </p>
+          {userPlanSource === "operator" && (
+            <p className="relative mt-1 text-xs text-slate-500">
+              Fonte oficial
+              {userPlanVerifiedAt &&
+              Date.now() - new Date(userPlanVerifiedAt).getTime() < 36e5 * 24
+                ? " · Atualizado hoje"
+                : ""}
+              {" · "}
+              <SourceOriginLink
+                operator={userPlanOperator}
+                planName={planName}
+                sourceUrl={userPlanSourceUrl}
+                collectedAt={userPlanVerifiedAt}
+              />
+            </p>
+          )}
 
           {userPlanStatus === "conflicting" && (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">

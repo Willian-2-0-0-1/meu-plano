@@ -11,7 +11,11 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:setup": "prisma db push && tsx prisma/seed.ts",
     "postinstall": "prisma generate",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "crawler:worker": "env -u VERCEL tsx crawlers/worker/run.ts",
+    "crawler:run": "env -u VERCEL tsx crawlers/worker/run.ts",
+    "crawler:batch": "env -u VERCEL tsx crawlers/worker/batch-campinas.ts",
+    "test:crawler": "tsx --test crawlers/__tests__/*.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.16.1",

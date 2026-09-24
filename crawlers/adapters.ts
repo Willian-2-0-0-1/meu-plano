@@ -1,3 +1,7 @@
+/**
+ * Adapters MOCK — fixtures estáveis para testar o pipeline sem rede.
+ * O adapter REAL fica em ./unimed-campinas.
+ */
 import type { HealthPlanProviderCrawler, NormalizedCrawlerResult } from "./types";
 
 function mockRow(
@@ -27,12 +31,16 @@ function mockRow(
   };
 }
 
-function makeAdapter(id: string, operator: string, fixtures: NormalizedCrawlerResult[]): HealthPlanProviderCrawler {
+function makeAdapter(
+  id: string,
+  operator: string,
+  fixtures: NormalizedCrawlerResult[]
+): HealthPlanProviderCrawler {
   return {
     id,
     operator,
+    isMock: true,
     async crawl() {
-      // MOCK: retorna fixtures estáveis para testar o pipeline
       return fixtures.map((f) => ({ ...f, collected_at: new Date() }));
     },
   };
@@ -124,7 +132,7 @@ export const intermedicaCrawler = makeAdapter("intermedica", "NotreDame Intermé
   }),
 ]);
 
-export const crawlers: HealthPlanProviderCrawler[] = [
+export const mockCrawlers: HealthPlanProviderCrawler[] = [
   unimedCrawler,
   amilCrawler,
   sulamericaCrawler,
@@ -132,6 +140,11 @@ export const crawlers: HealthPlanProviderCrawler[] = [
   intermedicaCrawler,
 ];
 
+/** @deprecated use mockCrawlers / registry */
+export const crawlers = mockCrawlers;
+
 export function getCrawler(id: string): HealthPlanProviderCrawler | undefined {
-  return crawlers.find((c) => c.id === id || c.operator.toLowerCase().includes(id.toLowerCase()));
+  return mockCrawlers.find(
+    (c) => c.id === id || c.operator.toLowerCase().includes(id.toLowerCase())
+  );
 }

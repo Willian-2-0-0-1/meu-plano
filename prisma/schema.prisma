@@ -45,6 +45,7 @@ model HealthPlan {
   experiences   ProviderExperience[]
   verificationRequests VerificationRequest[]
   planHistory   ProviderPlanHistory[]
+  planEvidence  ProviderPlanEvidence[]
 
   @@unique([operator, name])
 }
@@ -104,12 +105,15 @@ model Provider {
   specialties          ProviderSpecialty[]
   plans                ProviderPlan[]
   planHistory          ProviderPlanHistory[]
+  planEvidence         ProviderPlanEvidence[]
   confirmations        Confirmation[]
   experiences          ProviderExperience[]
   verificationRequests VerificationRequest[]
   favorites            Favorite[]
   whatsappClicks       WhatsAppClick[]
   profileClaims        ProfileClaim[]
+  dedupeAsA            ProviderDedupeReview[] @relation("DedupeA")
+  dedupeAsB            ProviderDedupeReview[] @relation("DedupeB")
 }
 
 model ProviderSpecialty {
@@ -128,6 +132,7 @@ model ProviderPlan {
   providerId     String
   healthPlanId   String
   // confirmed | listed | reported_not_accepting | not_found | conflicting | stale
+  // possibly_removed | removed_from_operator_network
   // legado: unconfirmed → listed, not_accepted → reported_not_accepting
   status         String   @default("listed")
   // operator | clinic | community | manual_admin (legado: user → community)
@@ -137,6 +142,9 @@ model ProviderPlan {
   confidence     Float    @default(0.5)
   lastCheckedAt  DateTime?
   lastVerifiedAt DateTime?
+  firstSeenAt    DateTime?
+  lastSeenAt     DateTime?
+  consecutiveMisses Int   @default(0)
   notes          String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -146,6 +154,7 @@ model ProviderPlan {
 
   provider   Provider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
   healthPlan HealthPlan @relation(fields: [healthPlanId], references: [id], onDelete: Cascade)
+  evidence   ProviderPlanEvidence[]
 
   @@unique([providerId, healthPlanId])
   @@index([status, lastCheckedAt])
@@ -293,15 +302,27 @@ model CrawlerRun {
   id           String   @id @default(cuid())
   operator     String
   adapter      String
-  status       String   @default("running") // running | success | failed
+  // queued | running | completed | partial | failed | success (legado)
+  status       String   @default("running")
   startedAt    DateTime @default(now())
   finishedAt   DateTime?
   rawCount     Int      @default(0)
   upserted     Int      @default(0)
+  recordsFound Int      @default(0)
+  recordsCreated Int    @default(0)
+  recordsUpdated Int    @default(0)
+  duplicatesDetected Int @default(0)
+  errorsCount  Int      @default(0)
+  durationMs   Int?
+  searchParametersJson String @default("{}")
+  errorSummary String?
+  isMock       Boolean  @default(false)
   errorsJson   String   @default("[]")
   note         String?
 
   rawResults CrawlerRawResult[]
+  jobs       CrawlerJob[]
+  evidence   ProviderPlanEvidence[]
 }
 
 model CrawlerRawResult {
@@ -325,8 +346,85 @@ model CrawlerRawResult {
   collectedAt      DateTime @default(now())
   processed        Boolean  @default(false)
   payloadJson      String   @default("{}")
+  requestPayloadJson String @default("{}")
+  rawPayloadJson   String   @default("{}")
+  httpStatus       Int?
+  contentHash      String?
+  unitName         String?
+  neighborhood     String?
+  complement       String?
+  addressNumber    String?
+  operatorProviderId String?
 
   run CrawlerRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  evidence ProviderPlanEvidence[]
 
   @@index([runId, processed])
+  @@index([contentHash])
+}
+
+/// Fila de jobs do worker (fora do request path do Next.js)
+model CrawlerJob {
+  id          String   @id @default(cuid())
+  adapter     String
+  // queued | running | completed | failed | cancelled
+  status      String   @default("queued")
+  paramsJson  String   @default("{}")
+  runId       String?
+  error       String?
+  createdAt   DateTime @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+
+  run CrawlerRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+}
+
+/// Evidências coexistentes (operadora / clínica / comunidade / admin) — uma não apaga a outra
+model ProviderPlanEvidence {
+  id           String   @id @default(cuid())
+  providerId   String
+  healthPlanId String
+  providerPlanId String?
+  // operator | clinic | community | admin
+  sourceType   String
+  sourceUrl    String?
+  sourceName   String?
+  collectedAt  DateTime @default(now())
+  contentHash  String?
+  note         String?
+  crawlerRunId String?
+  rawResultId  String?
+  createdAt    DateTime @default(now())
+
+  provider     Provider    @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  healthPlan   HealthPlan  @relation(fields: [healthPlanId], references: [id], onDelete: Cascade)
+  providerPlan ProviderPlan? @relation(fields: [providerPlanId], references: [id], onDelete: SetNull)
+  crawlerRun   CrawlerRun? @relation(fields: [crawlerRunId], references: [id], onDelete: SetNull)
+  rawResult    CrawlerRawResult? @relation(fields: [rawResultId], references: [id], onDelete: SetNull)
+
+  @@index([providerId, healthPlanId, collectedAt])
+  @@index([sourceType, collectedAt])
+}
+
+/// Casos duvidosos de deduplicação para revisão admin
+model ProviderDedupeReview {
+  id          String   @id @default(cuid())
+  providerAId String
+  providerBId String
+  confidence  Float
+  reason      String
+  // pending | merged | kept_separate
+  status      String   @default("pending")
+  crawlerRunId String?
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+  resolvedBy  String?
+
+  providerA Provider @relation("DedupeA", fields: [providerAId], references: [id], onDelete: Cascade)
+  providerB Provider @relation("DedupeB", fields: [providerBId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@unique([providerAId, providerBId])
 }

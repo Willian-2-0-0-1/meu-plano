@@ -37,9 +37,13 @@ export function HomePlanFlow({ initialPlan, isLoggedIn }: Props) {
       .then((d) => {
         setPlans(d.plans ?? []);
         if (!planId) {
-          const preferred = (d.plans as Plan[]).find(
-            (p) => p.operator === "SulAmérica" && p.name === "Especial 100"
-          );
+          const preferred =
+            (d.plans as Plan[]).find(
+              (p) => p.operator === "Unimed Campinas"
+            ) ||
+            (d.plans as Plan[]).find(
+              (p) => p.operator === "SulAmérica" && p.name === "Especial 100"
+            );
           if (preferred) {
             setPlanId(preferred.id);
             setOperator(preferred.operator);
@@ -47,6 +51,13 @@ export function HomePlanFlow({ initialPlan, isLoggedIn }: Props) {
         }
       });
   }, [planId]);
+
+  // Prefill localização para rede real Unimed Campinas
+  useEffect(() => {
+    if (operator === "Unimed Campinas" && !place && !geo) {
+      setPlace("Campinas");
+    }
+  }, [operator, place, geo]);
 
   const filteredPlans = useMemo(
     () => plans.filter((p) => p.operator === operator),

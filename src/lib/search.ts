@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseSearchQuery } from "@/lib/search-parser";
 import { rankProviders } from "@/lib/ranking";
-import { DEFAULT_LOCATION, resolveCepOrCity } from "@/lib/geo";
+import { DEFAULT_LOCATION, originForPlan, resolveCepOrCity } from "@/lib/geo";
 import { resolveActivePlan } from "@/lib/guest-plan";
 import { isStale, normalizeSourceType, normalizeStatus } from "@/lib/plan-status-helpers";
 
@@ -43,6 +43,8 @@ export type SearchResultItem = {
   specialties: string[];
   planStatus: string | null;
   planSource: string | null;
+  planSourceUrl?: string | null;
+  planOperator?: string | null;
   lastVerifiedAt: Date | string | null;
   planName: string | null;
   communityAccepted?: number;
@@ -55,7 +57,6 @@ export async function runProviderSearch(input: SearchParamsInput) {
   const q = input.q ?? "";
   const type = input.type ?? "";
   const specialty = input.specialty ?? "";
-  const maxDistance = Number(input.distance || "25");
   const onlyAccepts = input.acceptsPlan === "1";
   const onlyRecent = input.recentConfirm === "1";
   const openToday = input.openToday === "1";
@@ -67,16 +68,54 @@ export async function runProviderSearch(input: SearchParamsInput) {
   const includeNotAccepted = input.includeNotAccepted === "1";
   const includeUnconfirmed = input.includeUnconfirmed !== "0";
 
+  const parsed = parseSearchQuery(q);
+
+  let activePlanId: string | null = null;
+  let activePlanName: string | null = null;
+  let activePlanMeta: { operator: string; name: string; ansCode: string | null } | null = null;
+
+  if (session?.user?.id) {
+    const up = await prisma.userPlan.findFirst({
+      where: { userId: session.user.id, isActive: true },
+      include: { healthPlan: true },
+    });
+    if (up) {
+      activePlanId = up.healthPlanId;
+      activePlanName = `${up.healthPlan.operator} ${up.healthPlan.name}`;
+      activePlanMeta = {
+        operator: up.healthPlan.operator,
+        name: up.healthPlan.name,
+        ansCode: up.healthPlan.ansCode,
+      };
+    }
+  }
+
+  if (!activePlanId) {
+    const resolved = await resolveActivePlan({ planId: input.planId });
+    activePlanId = resolved.healthPlanId;
+    activePlanName = resolved.planName;
+    if (activePlanId) {
+      const hp = await prisma.healthPlan.findUnique({ where: { id: activePlanId } });
+      if (hp) {
+        activePlanMeta = { operator: hp.operator, name: hp.name, ansCode: hp.ansCode };
+      }
+    }
+  }
+
+  // Origem: place/geo explícitos > bias do plano (Unimed Campinas) > default SP
   let origin = { ...DEFAULT_LOCATION };
+  const planOrigin = originForPlan(activePlanMeta);
   if (locationMode === "geo" && lat != null && lng != null) {
-    origin = { city: "São Paulo", latitude: lat, longitude: lng };
+    origin = { city: place || planOrigin?.city || "São Paulo", latitude: lat, longitude: lng };
   } else if (place) {
-    const resolved = resolveCepOrCity(place);
+    const resolvedPlace = resolveCepOrCity(place);
     origin = {
-      city: resolved.city,
-      latitude: resolved.latitude,
-      longitude: resolved.longitude,
+      city: resolvedPlace.city,
+      latitude: resolvedPlace.latitude,
+      longitude: resolvedPlace.longitude,
     };
+  } else if (planOrigin) {
+    origin = { ...planOrigin };
   } else if (session?.user?.id) {
     const user = await prisma.user.findUnique({ where: { id: session.user.id } });
     if (user?.latitude && user?.longitude) {
@@ -88,26 +127,10 @@ export async function runProviderSearch(input: SearchParamsInput) {
     }
   }
 
-  const parsed = parseSearchQuery(q);
-
-  let activePlanId: string | null = null;
-  let activePlanName: string | null = null;
-
-  if (session?.user?.id) {
-    const up = await prisma.userPlan.findFirst({
-      where: { userId: session.user.id, isActive: true },
-      include: { healthPlan: true },
-    });
-    if (up) {
-      activePlanId = up.healthPlanId;
-      activePlanName = `${up.healthPlan.operator} ${up.healthPlan.name}`;
-    }
-  }
-
-  if (!activePlanId) {
-    const resolved = await resolveActivePlan({ planId: input.planId });
-    activePlanId = resolved.healthPlanId;
-    activePlanName = resolved.planName;
+  // Distância padrão maior para rede Campinas (cidade + arredores)
+  let maxDistance = Number(input.distance || "25");
+  if (!input.distance && planOrigin) {
+    maxDistance = 40;
   }
 
   const specialtyHints = [
@@ -230,6 +253,8 @@ export async function runProviderSearch(input: SearchParamsInput) {
       planStatus: status,
       lastVerifiedAt: plan?.lastVerifiedAt ?? plan?.lastCheckedAt ?? null,
       planSource: plan?.sourceType || plan?.source || null,
+      planSourceUrl: plan?.sourceUrl ?? null,
+      planOperator: plan?.healthPlan?.operator ?? null,
       specialtyMatch,
     };
   });
@@ -270,6 +295,8 @@ export async function runProviderSearch(input: SearchParamsInput) {
       specialties: p.specialties.map((s) => s.specialty.name),
       planStatus: p.planStatus,
       planSource: p.planSource ? normalizeSourceType(p.planSource) : null,
+      planSourceUrl: p.planSourceUrl ?? null,
+      planOperator: p.planOperator ?? null,
       lastVerifiedAt: p.lastVerifiedAt,
       planName: activePlanName,
       communityAccepted,

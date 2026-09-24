@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { upsertPlanStatus, type PlanStatus, type SourceType } from "@/lib/plan-status";
-import { runCrawlerPipeline, crawlers } from "@/lib/crawler-pipeline";
+import {
+  enqueueCrawlerJob,
+  listAdapters,
+  runCrawlerPipeline,
+} from "@/lib/crawler-pipeline";
 
 async function requireAdmin() {
   const session = await auth();
@@ -24,10 +28,12 @@ export async function GET() {
     confirmations,
     experiences,
     crawlerRuns,
+    crawlerJobs,
     conflicts,
     reports,
     claims,
     history,
+    dedupeReviews,
   ] = await Promise.all([
     prisma.provider.findMany({
       include: {
@@ -66,9 +72,27 @@ export async function GET() {
       take: 50,
     }),
     prisma.crawlerRun.findMany({
+      include: {
+        rawResults: {
+          take: 5,
+          orderBy: { collectedAt: "desc" },
+          select: {
+            id: true,
+            providerName: true,
+            city: true,
+            specialty: true,
+            phone: true,
+            sourceUrl: true,
+            contentHash: true,
+            httpStatus: true,
+            payloadJson: true,
+          },
+        },
+      },
       orderBy: { startedAt: "desc" },
       take: 30,
     }),
+    prisma.crawlerJob.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
     prisma.providerPlan.findMany({
       where: { status: "conflicting" },
       include: { provider: true, healthPlan: true },
@@ -92,6 +116,15 @@ export async function GET() {
       orderBy: { observedAt: "desc" },
       take: 40,
     }),
+    prisma.providerDedupeReview.findMany({
+      where: { status: "pending" },
+      include: {
+        providerA: { select: { id: true, name: true, address: true, city: true, phone: true } },
+        providerB: { select: { id: true, name: true, address: true, city: true, phone: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    }),
   ]);
 
   return NextResponse.json({
@@ -102,11 +135,13 @@ export async function GET() {
     confirmations,
     experiences,
     crawlerRuns,
+    crawlerJobs,
     conflicts,
     reports,
     claims,
     history,
-    crawlerAdapters: crawlers.map((c) => ({ id: c.id, operator: c.operator })),
+    dedupeReviews,
+    crawlerAdapters: listAdapters(),
   });
 }
 
@@ -256,10 +291,45 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ request: updated });
   }
 
+  if (action === "enqueueCrawler") {
+    const adapter = (body.adapter as string) || "unimed-campinas";
+    const params = {
+      city: (body.city as string) || undefined,
+      specialty: (body.specialty as string) || undefined,
+      plan: (body.plan as string) || undefined,
+      planAnsCode: (body.planAnsCode as string) || undefined,
+      limit: body.limit != null ? Number(body.limit) : 8,
+    };
+    const job = await enqueueCrawlerJob(adapter, params);
+    return NextResponse.json({
+      job,
+      hint: "Rode npm run crawler:worker -- --once para processar a fila.",
+    });
+  }
+
   if (action === "runCrawler") {
-    const adapter = (body.adapter as string) || "sulamerica";
-    const run = await runCrawlerPipeline(adapter);
+    const adapter = (body.adapter as string) || "unimed-campinas";
+    const params = {
+      city: (body.city as string) || undefined,
+      specialty: (body.specialty as string) || undefined,
+      plan: (body.plan as string) || undefined,
+      planAnsCode: (body.planAnsCode as string) || undefined,
+      limit: body.limit != null ? Number(body.limit) : 8,
+    };
+    const run = await runCrawlerPipeline(adapter, params);
     return NextResponse.json({ run });
+  }
+
+  if (action === "resolveDedupe") {
+    const review = await prisma.providerDedupeReview.update({
+      where: { id: body.id },
+      data: {
+        status: body.decision === "merged" ? "merged" : "kept_separate",
+        resolvedAt: new Date(),
+        resolvedBy: session.user?.email ?? "admin",
+      },
+    });
+    return NextResponse.json({ review });
   }
 
   if (action === "updateReport") {

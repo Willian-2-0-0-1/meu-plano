@@ -6,6 +6,7 @@ import {
   sourceLabel,
 } from "@/lib/utils";
 import { MapPin, Star, MessageCircle, Users } from "lucide-react";
+import { SourceOriginLink } from "@/components/source-origin-link";
 
 export type ProviderCardData = {
   id: string;
@@ -16,6 +17,8 @@ export type ProviderCardData = {
   planName?: string | null;
   planStatus?: string | null;
   planSource?: string | null;
+  planSourceUrl?: string | null;
+  planOperator?: string | null;
   lastVerifiedAt?: string | Date | null;
   whatsapp?: string | null;
   neighborhood?: string;
@@ -99,6 +102,30 @@ export function ProviderCard({
           `🟡 ${formatRelativeDays(provider.lastVerifiedAt)}`
         )}
       </p>
+
+      {(provider.planSource === "operator" || provider.planSourceUrl) && (
+        <p className="relative mt-1 text-xs text-slate-500">
+          {provider.planSourceUrl?.includes("mock.meuplano")
+            ? "Dado MOCK (teste)"
+            : "Fonte oficial"}
+          {provider.lastVerifiedAt &&
+          Date.now() - new Date(provider.lastVerifiedAt).getTime() < 36e5 * 24
+            ? " · Atualizado hoje"
+            : ""}
+          {" · "}
+          <SourceOriginLink
+            operator={provider.planOperator}
+            planName={provider.planName}
+            sourceUrl={provider.planSourceUrl}
+            collectedAt={provider.lastVerifiedAt}
+            sourceLabel={
+              provider.planSourceUrl?.includes("mock.meuplano")
+                ? "Origem MOCK"
+                : "Fonte oficial"
+            }
+          />
+        </p>
+      )}
 
       {communityTotal > 0 && (
         <p className="mt-1 inline-flex items-center gap-1 text-xs text-slate-500">
