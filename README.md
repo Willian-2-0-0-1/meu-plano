@@ -12,6 +12,7 @@ PWA mobile-first para descobrir **quem realmente atende o seu plano de saúde**,
 - Conflitos explícitos (operadora vs comunidade)
 - Crawlers **MOCK** em `/crawlers` + pipeline de deduplicação
 - Admin com crawlers, conflitos, denúncias e reivindicações
+- **Infra real de crawler**: worker separado, Unimed Campinas (guia público), raw/normalize/dedupe/evidence/history
 
 ## Stack
 
@@ -60,10 +61,19 @@ npm run dev   # http://localhost:43123
 | `/favoritos`, `/perfil` | Conta | Sim |
 | `/admin` | Crawlers, conflitos, denúncias, CRUD | Admin |
 
-## Crawlers MOCK
+## Crawlers
 
-Pasta `/crawlers` — adapters stub (Unimed, Amil, SulAmérica, Bradesco, Intermédica).  
-Rode pelo admin (aba Crawlers) ou veja `crawlers/README.md`.
+Pasta `/crawlers` — adapters MOCK + **1 operadora REAL** (`unimed-campinas`).
+
+```bash
+# Teste real pequeno (fora do Next.js)
+npm run crawler:run -- --adapter unimed-campinas --city Campinas --specialty Dermatologia --limit 8
+
+# Fila (admin enfileira → worker consome)
+npm run crawler:worker -- --once
+```
+
+Ver `crawlers/README.md`.
 
 ## Scripts
 
@@ -72,4 +82,6 @@ npm run dev
 npm run build
 npm run db:setup
 npm run db:seed
+npm run crawler:run
+npm run test:crawler
 ```

@@ -43,6 +43,8 @@ export type SearchResultItem = {
   specialties: string[];
   planStatus: string | null;
   planSource: string | null;
+  planSourceUrl?: string | null;
+  planOperator?: string | null;
   lastVerifiedAt: Date | string | null;
   planName: string | null;
   communityAccepted?: number;
@@ -230,6 +232,8 @@ export async function runProviderSearch(input: SearchParamsInput) {
       planStatus: status,
       lastVerifiedAt: plan?.lastVerifiedAt ?? plan?.lastCheckedAt ?? null,
       planSource: plan?.sourceType || plan?.source || null,
+      planSourceUrl: plan?.sourceUrl ?? null,
+      planOperator: plan?.healthPlan?.operator ?? null,
       specialtyMatch,
     };
   });
@@ -270,6 +274,8 @@ export async function runProviderSearch(input: SearchParamsInput) {
       specialties: p.specialties.map((s) => s.specialty.name),
       planStatus: p.planStatus,
       planSource: p.planSource ? normalizeSourceType(p.planSource) : null,
+      planSourceUrl: p.planSourceUrl ?? null,
+      planOperator: p.planOperator ?? null,
       lastVerifiedAt: p.lastVerifiedAt,
       planName: activePlanName,
       communityAccepted,

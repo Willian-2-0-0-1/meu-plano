@@ -53,10 +53,43 @@ type AdminData = {
     status: string;
     rawCount: number;
     upserted: number;
+    recordsFound?: number;
+    recordsCreated?: number;
+    recordsUpdated?: number;
+    duplicatesDetected?: number;
+    durationMs?: number | null;
+    isMock?: boolean;
+    searchParametersJson?: string;
     errorsJson: string;
     startedAt: string;
     finishedAt: string | null;
     note: string | null;
+    rawResults?: Array<{
+      id: string;
+      providerName: string;
+      city: string | null;
+      specialty: string | null;
+      phone: string | null;
+      sourceUrl: string | null;
+      contentHash: string | null;
+      httpStatus: number | null;
+      payloadJson: string;
+    }>;
+  }>;
+  crawlerJobs?: Array<{
+    id: string;
+    adapter: string;
+    status: string;
+    paramsJson: string;
+    createdAt: string;
+    error: string | null;
+  }>;
+  dedupeReviews?: Array<{
+    id: string;
+    confidence: number;
+    reason: string;
+    providerA: { id: string; name: string; address: string; city: string; phone: string | null };
+    providerB: { id: string; name: string; address: string; city: string; phone: string | null };
   }>;
   conflicts: Array<{
     id: string;
@@ -91,7 +124,7 @@ type AdminData = {
     provider: { name: string };
     healthPlan: { operator: string; name: string };
   }>;
-  crawlerAdapters: Array<{ id: string; operator: string }>;
+  crawlerAdapters: Array<{ id: string; operator: string; isMock?: boolean; kind?: string }>;
 };
 
 type Tab =
@@ -101,6 +134,7 @@ type Tab =
   | "requests"
   | "confirmations"
   | "crawlers"
+  | "dedupe"
   | "conflicts"
   | "reports"
   | "claims"
@@ -112,6 +146,13 @@ export default function AdminPage() {
   const [data, setData] = useState<AdminData | null>(null);
   const [tab, setTab] = useState<Tab>("providers");
   const [msg, setMsg] = useState<string | null>(null);
+  const [crawlForm, setCrawlForm] = useState({
+    city: "Campinas",
+    specialty: "Dermatologia",
+    plan: "PLANO UNIMED PESSOA FISICA -0347",
+    limit: "8",
+  });
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "",
     type: "clinica",
@@ -184,6 +225,7 @@ export default function AdminPage() {
     ["plans", "Planos"],
     ["specialties", "Especialidades"],
     ["crawlers", "Crawlers"],
+    ["dedupe", "Duplicados"],
     ["conflicts", "Conflitos"],
     ["history", "Alterações"],
     ["requests", "Verificações"],
@@ -483,33 +525,159 @@ export default function AdminPage() {
       {tab === "crawlers" && (
         <div className="mt-4 space-y-4">
           <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold">Rodar crawler MOCK</h2>
+            <h2 className="text-sm font-semibold">Crawlers</h2>
             <p className="mt-1 text-xs text-slate-500">
-              Dados fictícios — sem scrapers reais. Pipeline: raw → normalize → dedupe → status → histórico.
+              Preferir enfileirar + worker. Executar agora fica no processo do admin (útil para teste
+              local). Pipeline: raw → normalize → dedupe → evidence → status → histórico.
             </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="text-xs">
+                Cidade
+                <input
+                  className="mt-1 w-full rounded-lg border px-2 py-1.5"
+                  value={crawlForm.city}
+                  onChange={(e) => setCrawlForm((f) => ({ ...f, city: e.target.value }))}
+                />
+              </label>
+              <label className="text-xs">
+                Especialidade
+                <input
+                  className="mt-1 w-full rounded-lg border px-2 py-1.5"
+                  value={crawlForm.specialty}
+                  onChange={(e) => setCrawlForm((f) => ({ ...f, specialty: e.target.value }))}
+                />
+              </label>
+              <label className="text-xs">
+                Plano
+                <input
+                  className="mt-1 w-full rounded-lg border px-2 py-1.5"
+                  value={crawlForm.plan}
+                  onChange={(e) => setCrawlForm((f) => ({ ...f, plan: e.target.value }))}
+                />
+              </label>
+              <label className="text-xs">
+                Limite
+                <input
+                  className="mt-1 w-full rounded-lg border px-2 py-1.5"
+                  value={crawlForm.limit}
+                  onChange={(e) => setCrawlForm((f) => ({ ...f, limit: e.target.value }))}
+                />
+              </label>
+            </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {data.crawlerAdapters.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  className="rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white"
-                  onClick={() => void adminAction({ action: "runCrawler", adapter: a.id })}
-                >
-                  {a.operator}
-                </button>
+                <div key={a.id} className="flex flex-col gap-1 rounded-xl border border-slate-100 p-2">
+                  <span className="text-[11px] font-medium text-slate-700">
+                    {a.operator}{" "}
+                    <span className={a.isMock ? "text-amber-600" : "text-emerald-700"}>
+                      {a.isMock ? "MOCK" : "REAL"}
+                    </span>
+                  </span>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      className="rounded-lg bg-brand-600 px-2 py-1 text-[11px] font-semibold text-white"
+                      onClick={() =>
+                        void adminAction({
+                          action: "runCrawler",
+                          adapter: a.id,
+                          city: crawlForm.city,
+                          specialty: crawlForm.specialty,
+                          plan: crawlForm.plan,
+                          limit: Number(crawlForm.limit) || 8,
+                        })
+                      }
+                    >
+                      Executar
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg border px-2 py-1 text-[11px] font-semibold"
+                      onClick={() =>
+                        void adminAction({
+                          action: "enqueueCrawler",
+                          adapter: a.id,
+                          city: crawlForm.city,
+                          specialty: crawlForm.specialty,
+                          plan: crawlForm.plan,
+                          limit: Number(crawlForm.limit) || 8,
+                        })
+                      }
+                    >
+                      Enfileirar
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
+
+          {(data.crawlerJobs?.length ?? 0) > 0 && (
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 text-sm shadow-sm">
+              <h3 className="text-xs font-semibold uppercase text-slate-500">Fila</h3>
+              <ul className="mt-2 space-y-1">
+                {data.crawlerJobs!.map((j) => (
+                  <li key={j.id} className="text-xs text-slate-600">
+                    {j.adapter} · {j.status} · {new Date(j.createdAt).toLocaleString("pt-BR")}
+                    {j.error ? ` · ${j.error}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <ul className="space-y-2">
             {data.crawlerRuns.map((r) => (
               <li key={r.id} className="rounded-xl bg-white p-3 text-sm shadow-sm">
-                <p className="font-medium">
-                  {r.adapter} · {r.status}
-                </p>
-                <p className="text-xs text-slate-500">
-                  raw {r.rawCount} · upserted {r.upserted} ·{" "}
-                  {new Date(r.startedAt).toLocaleString("pt-BR")}
-                </p>
+                <button
+                  type="button"
+                  className="w-full text-left"
+                  onClick={() => setSelectedRunId((id) => (id === r.id ? null : r.id))}
+                >
+                  <p className="font-medium">
+                    {r.adapter} · {r.status}{" "}
+                    <span className="text-[10px] text-slate-400">
+                      {r.isMock ? "MOCK" : "REAL"}
+                    </span>
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    encontrados {r.recordsFound ?? r.rawCount} · criados {r.recordsCreated ?? "—"} ·
+                    atualizados {r.recordsUpdated ?? "—"} · dedupe {r.duplicatesDetected ?? "—"} ·{" "}
+                    {r.durationMs != null ? `${r.durationMs}ms` : "—"} ·{" "}
+                    {new Date(r.startedAt).toLocaleString("pt-BR")}
+                  </p>
+                  {r.searchParametersJson && r.searchParametersJson !== "{}" && (
+                    <p className="mt-1 text-[11px] text-slate-400">{r.searchParametersJson}</p>
+                  )}
+                </button>
+                {selectedRunId === r.id && r.rawResults && (
+                  <div className="mt-2 rounded-lg bg-slate-50 p-2 text-[11px]">
+                    <p className="font-semibold text-slate-700">Amostras RAW / normalizado</p>
+                    <ul className="mt-1 space-y-2">
+                      {r.rawResults.map((raw) => (
+                        <li key={raw.id} className="border-t border-slate-200 pt-1">
+                          <p className="font-medium">{raw.providerName}</p>
+                          <p>
+                            {raw.specialty} · {raw.city} · {raw.phone}
+                          </p>
+                          <p className="truncate text-slate-400">
+                            hash {raw.contentHash} · HTTP {raw.httpStatus}
+                          </p>
+                          {raw.sourceUrl && (
+                            <a
+                              href={raw.sourceUrl}
+                              className="text-brand-700 underline"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              origem
+                            </a>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {r.errorsJson !== "[]" && (
                   <p className="mt-1 text-xs text-rose-600">{r.errorsJson}</p>
                 )}
@@ -517,6 +685,61 @@ export default function AdminPage() {
             ))}
           </ul>
         </div>
+      )}
+
+      {tab === "dedupe" && (
+        <ul className="mt-4 space-y-2">
+          {(data.dedupeReviews?.length ?? 0) === 0 && (
+            <li className="text-sm text-slate-500">Nenhuma duplicidade pendente.</li>
+          )}
+          {data.dedupeReviews?.map((d) => (
+            <li key={d.id} className="rounded-xl border border-slate-100 bg-white p-3 text-sm shadow-sm">
+              <p className="text-xs text-slate-500">
+                confiança {(d.confidence * 100).toFixed(0)}% · {d.reason}
+              </p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <div className="rounded-lg bg-slate-50 p-2 text-xs">
+                  <p className="font-semibold">A · {d.providerA.name}</p>
+                  <p>
+                    {d.providerA.address} · {d.providerA.city}
+                  </p>
+                  <p>{d.providerA.phone}</p>
+                </div>
+                <div className="rounded-lg bg-slate-50 p-2 text-xs">
+                  <p className="font-semibold">B · {d.providerB.name}</p>
+                  <p>
+                    {d.providerB.address} · {d.providerB.city}
+                  </p>
+                  <p>{d.providerB.phone}</p>
+                </div>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg bg-brand-600 px-2 py-1 text-[11px] font-semibold text-white"
+                  onClick={() =>
+                    void adminAction({ action: "resolveDedupe", id: d.id, decision: "merged" })
+                  }
+                >
+                  Mesclar
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border px-2 py-1 text-[11px] font-semibold"
+                  onClick={() =>
+                    void adminAction({
+                      action: "resolveDedupe",
+                      id: d.id,
+                      decision: "kept_separate",
+                    })
+                  }
+                >
+                  Manter separado
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
 
       {tab === "conflicts" && (
