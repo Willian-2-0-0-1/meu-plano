@@ -21,7 +21,13 @@ export const DEFAULT_LOCATION = {
   longitude: -46.6333,
 };
 
-/** Rough CEP → neighborhood centroids for São Paulo demo */
+export const CAMPINAS_LOCATION = {
+  city: "Campinas",
+  latitude: -22.9056,
+  longitude: -47.0608,
+};
+
+/** Rough CEP → neighborhood centroids for São Paulo demo + Campinas (rede real) */
 export function resolveCepOrCity(input: string): {
   city: string;
   latitude: number;
@@ -29,6 +35,11 @@ export function resolveCepOrCity(input: string): {
   neighborhood?: string;
 } {
   const q = input.trim().toLowerCase();
+
+  if (q.includes("campinas") || q.replace(/\D/g, "").startsWith("130")) {
+    return { ...CAMPINAS_LOCATION };
+  }
+
   const neighborhoods: Record<string, { lat: number; lng: number; name: string }> = {
     pinheiros: { lat: -23.5672, lng: -46.6918, name: "Pinheiros" },
     moema: { lat: -23.6015, lng: -46.6632, name: "Moema" },
@@ -60,4 +71,20 @@ export function resolveCepOrCity(input: string): {
   if (digits.startsWith("013")) return { city: "São Paulo", latitude: -23.5614, longitude: -46.6558, neighborhood: "Bela Vista" };
 
   return { ...DEFAULT_LOCATION };
+}
+
+/** Origem sugerida a partir do plano ativo (rede real Unimed Campinas). */
+export function originForPlan(plan?: {
+  operator?: string | null;
+  name?: string | null;
+  ansCode?: string | null;
+} | null): typeof CAMPINAS_LOCATION | null {
+  if (!plan) return null;
+  const op = (plan.operator ?? "").toLowerCase();
+  const name = (plan.name ?? "").toLowerCase();
+  const ans = plan.ansCode ?? "";
+  if (op.includes("campinas") || name.includes("0347") || ans === "0347") {
+    return { ...CAMPINAS_LOCATION };
+  }
+  return null;
 }

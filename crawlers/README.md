@@ -30,6 +30,9 @@ npm run crawler:worker -- --once
 # Execução direta (teste real pequeno)
 npm run crawler:run -- --adapter unimed-campinas --city Campinas --specialty Dermatologia --limit 8
 
+# Dermatologia + Pediatria + Cardiologia (rate limit entre especialidades)
+npm run crawler:batch -- --limit 8
+
 # Poll contínuo
 npm run crawler:worker -- --poll 5000
 ```

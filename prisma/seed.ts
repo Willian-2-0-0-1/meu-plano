@@ -109,6 +109,12 @@ async function main() {
   });
 
   const planDefs = [
+    {
+      operator: "Unimed Campinas",
+      name: "PLANO UNIMED PESSOA FISICA -0347",
+      category: "Individual (rede real)",
+      ansCode: "0347",
+    },
     { operator: "SulAmérica", name: "Especial 100", category: "Individual" },
     { operator: "SulAmérica", name: "Exato", category: "Empresarial" },
     { operator: "Unimed", name: "Unimed Nacional", category: "Individual" },
