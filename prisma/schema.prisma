@@ -23,9 +23,12 @@ model User {
   plans                 UserPlan[]
   favorites             Favorite[]
   confirmations         Confirmation[]
+  experiences           ProviderExperience[]
   verificationRequests  VerificationRequest[]
   searches              SearchEvent[]
   whatsappClicks        WhatsAppClick[]
+  commentReports        CommentReport[]
+  profileClaims         ProfileClaim[]
 }
 
 model HealthPlan {
@@ -33,12 +36,15 @@ model HealthPlan {
   operator  String
   name      String
   category  String?
+  ansCode   String?
   createdAt DateTime @default(now())
 
   userPlans     UserPlan[]
   providerPlans ProviderPlan[]
   confirmations Confirmation[]
+  experiences   ProviderExperience[]
   verificationRequests VerificationRequest[]
+  planHistory   ProviderPlanHistory[]
 
   @@unique([operator, name])
 }
@@ -65,38 +71,45 @@ model Specialty {
   keywords    String   @default("") // CSV de sinônimos para busca NLP MVP
   createdAt   DateTime @default(now())
 
-  providers ProviderSpecialty[]
+  providers   ProviderSpecialty[]
+  experiences ProviderExperience[]
 }
 
 model Provider {
-  id          String   @id @default(cuid())
-  name        String
-  type        String   // medico | clinica | laboratorio | hospital | pronto_atendimento | terapia
-  description String?
-  photoUrl    String?
-  phone       String?
-  whatsapp    String?
-  email       String?
-  address     String
+  id           String   @id @default(cuid())
+  name         String
+  type         String   // medico | clinica | laboratorio | hospital | pronto_atendimento | terapia
+  description  String?
+  photoUrl     String?
+  phone        String?
+  whatsapp     String?
+  email        String?
+  documentCnpj String?
+  documentCnes String?
+  address      String
   neighborhood String
-  city        String
-  state       String   @default("SP")
-  cep         String?
-  latitude    Float
-  longitude   Float
-  rating      Float    @default(4.5)
-  reviewCount Int      @default(0)
-  hoursJson   String   @default("{}") // JSON de horários
-  openToday   Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  city         String
+  state        String   @default("SP")
+  cep          String?
+  latitude     Float
+  longitude    Float
+  rating       Float    @default(4.5)
+  reviewCount  Int      @default(0)
+  hoursJson    String   @default("{}") // JSON de horários
+  openToday    Boolean  @default(true)
+  claimed      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   specialties          ProviderSpecialty[]
   plans                ProviderPlan[]
+  planHistory          ProviderPlanHistory[]
   confirmations        Confirmation[]
+  experiences          ProviderExperience[]
   verificationRequests VerificationRequest[]
   favorites            Favorite[]
   whatsappClicks       WhatsAppClick[]
+  profileClaims        ProfileClaim[]
 }
 
 model ProviderSpecialty {
@@ -109,25 +122,75 @@ model ProviderSpecialty {
   @@id([providerId, specialtyId])
 }
 
+/// Proveniência atual do vínculo prestador ↔ plano (provider_plan_status)
 model ProviderPlan {
-  id           String   @id @default(cuid())
-  providerId   String
-  healthPlanId String
-  // confirmed | unconfirmed | not_accepted
-  status       String   @default("unconfirmed")
-  // clinic | user | operator
-  source       String   @default("operator")
+  id             String   @id @default(cuid())
+  providerId     String
+  healthPlanId   String
+  // confirmed | listed | reported_not_accepting | not_found | conflicting | stale
+  // legado: unconfirmed → listed, not_accepted → reported_not_accepting
+  status         String   @default("listed")
+  // operator | clinic | community | manual_admin (legado: user → community)
+  sourceType     String   @default("operator")
+  sourceUrl      String?
+  sourceName     String?
+  confidence     Float    @default(0.5)
+  lastCheckedAt  DateTime?
   lastVerifiedAt DateTime?
-  notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // legado (mantido para compatibilidade de leitura)
+  source String @default("operator")
 
   provider   Provider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
   healthPlan HealthPlan @relation(fields: [healthPlanId], references: [id], onDelete: Cascade)
 
   @@unique([providerId, healthPlanId])
+  @@index([status, lastCheckedAt])
 }
 
+/// Histórico imutável de mudanças de status
+model ProviderPlanHistory {
+  id             String   @id @default(cuid())
+  providerId     String
+  healthPlanId   String
+  previousStatus String?
+  newStatus      String
+  sourceType     String
+  sourceUrl      String?
+  observedAt     DateTime @default(now())
+  note           String?
+
+  provider   Provider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  healthPlan HealthPlan @relation(fields: [healthPlanId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, healthPlanId, observedAt])
+}
+
+/// Confirmação estruturada da comunidade (SIM/NÃO + contexto)
+model ProviderExperience {
+  id              String   @id @default(cuid())
+  userId          String
+  providerId      String
+  healthPlanId    String
+  specialtyId     String?
+  accepted        Boolean
+  experienceDate  DateTime?
+  comment         String?
+  createdAt       DateTime @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider   Provider    @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  healthPlan HealthPlan  @relation(fields: [healthPlanId], references: [id], onDelete: Cascade)
+  specialty  Specialty?  @relation(fields: [specialtyId], references: [id], onDelete: SetNull)
+
+  @@index([providerId, createdAt])
+  @@index([healthPlanId, createdAt])
+}
+
+/// Confirmação legada (sim/não/unknown) — mantida
 model Confirmation {
   id           String   @id @default(cuid())
   userId       String
@@ -173,7 +236,6 @@ model Favorite {
   @@unique([userId, providerId])
 }
 
-// Métricas futuras (já estruturadas)
 model SearchEvent {
   id          String   @id @default(cuid())
   userId      String?
@@ -195,4 +257,76 @@ model WhatsAppClick {
 
   user     User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+}
+
+model CommentReport {
+  id         String   @id @default(cuid())
+  userId     String
+  targetType String   // experience | confirmation
+  targetId   String
+  reason     String   // spam | ofensa | info_pessoal | info_medica | falsa | outro
+  details    String?
+  status     String   @default("pending") // pending | reviewed | dismissed
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}
+
+model ProfileClaim {
+  id         String   @id @default(cuid())
+  userId     String
+  providerId String
+  message    String?
+  status     String   @default("pending") // pending | approved | rejected
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}
+
+model CrawlerRun {
+  id           String   @id @default(cuid())
+  operator     String
+  adapter      String
+  status       String   @default("running") // running | success | failed
+  startedAt    DateTime @default(now())
+  finishedAt   DateTime?
+  rawCount     Int      @default(0)
+  upserted     Int      @default(0)
+  errorsJson   String   @default("[]")
+  note         String?
+
+  rawResults CrawlerRawResult[]
+}
+
+model CrawlerRawResult {
+  id               String   @id @default(cuid())
+  runId            String
+  operator         String
+  planName         String
+  planAnsCode      String?
+  providerName     String
+  providerDocument String?
+  specialty        String?
+  service          String?
+  address          String?
+  city             String?
+  state            String?
+  postalCode       String?
+  phone            String?
+  latitude         Float?
+  longitude        Float?
+  sourceUrl        String?
+  collectedAt      DateTime @default(now())
+  processed        Boolean  @default(false)
+  payloadJson      String   @default("{}")
+
+  run CrawlerRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, processed])
 }

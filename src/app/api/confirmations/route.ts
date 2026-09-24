@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { upsertPlanStatus } from "@/lib/plan-status";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -36,28 +37,23 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Update provider_plans based on answer
   if (answer === "yes" || answer === "no") {
-    const status = answer === "yes" ? "confirmed" : "not_accepted";
-    await prisma.providerPlan.upsert({
-      where: {
-        providerId_healthPlanId: {
-          providerId,
-          healthPlanId: activePlan.healthPlanId,
-        },
-      },
-      create: {
+    await prisma.providerExperience.create({
+      data: {
+        userId: session.user.id,
         providerId,
         healthPlanId: activePlan.healthPlanId,
-        status,
-        source: "user",
-        lastVerifiedAt: new Date(),
+        accepted: answer === "yes",
       },
-      update: {
-        status,
-        source: "user",
-        lastVerifiedAt: new Date(),
-      },
+    });
+
+    await upsertPlanStatus({
+      providerId,
+      healthPlanId: activePlan.healthPlanId,
+      status: answer === "yes" ? "confirmed" : "reported_not_accepting",
+      sourceType: "community",
+      sourceName: "Confirmação rápida",
+      confidence: 0.5,
     });
   }
 

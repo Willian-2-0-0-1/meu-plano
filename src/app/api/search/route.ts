@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     lat: sp.get("lat") ?? undefined,
     lng: sp.get("lng") ?? undefined,
     place: sp.get("place") ?? "",
+    planId: sp.get("planId") ?? undefined,
   });
   return NextResponse.json(data);
 }

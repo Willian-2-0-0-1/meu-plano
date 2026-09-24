@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { parseSearchQuery } from "@/lib/search-parser";
 import { rankProviders } from "@/lib/ranking";
 import { DEFAULT_LOCATION, resolveCepOrCity } from "@/lib/geo";
+import { resolveActivePlan } from "@/lib/guest-plan";
+import { isStale, normalizeSourceType, normalizeStatus } from "@/lib/plan-status-helpers";
 
 export type SearchParamsInput = {
   q?: string;
@@ -19,6 +21,7 @@ export type SearchParamsInput = {
   lat?: string | number;
   lng?: string | number;
   place?: string;
+  planId?: string;
 };
 
 export type SearchResultItem = {
@@ -42,6 +45,9 @@ export type SearchResultItem = {
   planSource: string | null;
   lastVerifiedAt: Date | string | null;
   planName: string | null;
+  communityAccepted?: number;
+  communityDenied?: number;
+  conflicting?: boolean;
 };
 
 export async function runProviderSearch(input: SearchParamsInput) {
@@ -86,13 +92,22 @@ export async function runProviderSearch(input: SearchParamsInput) {
 
   let activePlanId: string | null = null;
   let activePlanName: string | null = null;
+
   if (session?.user?.id) {
     const up = await prisma.userPlan.findFirst({
       where: { userId: session.user.id, isActive: true },
       include: { healthPlan: true },
     });
-    activePlanId = up?.healthPlanId ?? null;
-    activePlanName = up ? `${up.healthPlan.operator} ${up.healthPlan.name}` : null;
+    if (up) {
+      activePlanId = up.healthPlanId;
+      activePlanName = `${up.healthPlan.operator} ${up.healthPlan.name}`;
+    }
+  }
+
+  if (!activePlanId) {
+    const resolved = await resolveActivePlan({ planId: input.planId });
+    activePlanId = resolved.healthPlanId;
+    activePlanName = resolved.planName;
   }
 
   const specialtyHints = [
@@ -100,6 +115,7 @@ export async function runProviderSearch(input: SearchParamsInput) {
     ...(specialty ? [specialty] : []),
   ];
   const typeHints = [...parsed.typeHints, ...(type ? [type] : [])];
+  void typeHints;
 
   const providers = await prisma.provider.findMany({
     include: {
@@ -113,6 +129,12 @@ export async function runProviderSearch(input: SearchParamsInput) {
             where: { id: "___no_active_plan___" },
             include: { healthPlan: true },
           },
+      experiences: activePlanId
+        ? {
+            where: { healthPlanId: activePlanId },
+            select: { accepted: true },
+          }
+        : false,
     },
   });
 
@@ -155,15 +177,23 @@ export async function runProviderSearch(input: SearchParamsInput) {
     }
 
     const plan = p.plans[0];
-    const status = plan?.status ?? null;
+    let status = normalizeStatus(plan?.status ?? null);
+    if (status === "listed" && isStale(plan?.lastCheckedAt ?? plan?.lastVerifiedAt)) {
+      status = "stale";
+    }
     if (onlyAccepts && status !== "confirmed") return false;
-    if (!includeNotAccepted && status === "not_accepted") return false;
-    if (!includeUnconfirmed && status === "unconfirmed") return false;
+    if (
+      !includeNotAccepted &&
+      (status === "reported_not_accepting" || status === "not_accepted")
+    )
+      return false;
+    if (!includeUnconfirmed && (status === "listed" || status === "stale" || status === "unconfirmed"))
+      return false;
     if (onlyRecent) {
-      if (!plan?.lastVerifiedAt) return false;
+      if (!plan?.lastVerifiedAt && !plan?.lastCheckedAt) return false;
+      const ref = plan.lastVerifiedAt ?? plan.lastCheckedAt;
       const days =
-        (Date.now() - new Date(plan.lastVerifiedAt).getTime()) /
-        (1000 * 60 * 60 * 24);
+        (Date.now() - new Date(ref!).getTime()) / (1000 * 60 * 60 * 24);
       if (days > 30) return false;
     }
     return true;
@@ -184,51 +214,69 @@ export async function runProviderSearch(input: SearchParamsInput) {
 
   const rankable = filtered.map((p) => {
     const plan = p.plans[0];
+    let status = normalizeStatus(plan?.status ?? null);
+    if (status === "listed" && isStale(plan?.lastCheckedAt ?? plan?.lastVerifiedAt)) {
+      status = "stale";
+    }
+    const specialtyMatch = specialtyHints.length
+      ? p.specialties.some((s) =>
+          specialtyHints.some((h) =>
+            s.specialty.name.toLowerCase().includes(h.toLowerCase())
+          )
+        )
+      : false;
     return {
       ...p,
-      planStatus: plan?.status ?? null,
-      lastVerifiedAt: plan?.lastVerifiedAt ?? null,
-      planSource: plan?.source ?? null,
+      planStatus: status,
+      lastVerifiedAt: plan?.lastVerifiedAt ?? plan?.lastCheckedAt ?? null,
+      planSource: plan?.sourceType || plan?.source || null,
+      specialtyMatch,
     };
   });
 
   const ranked = rankProviders(rankable, origin).filter((p) => p.distanceKm <= maxDistance);
 
-  if (session?.user?.id) {
-    await prisma.searchEvent.create({
-      data: {
-        userId: session.user.id,
-        query: q || specialty || type || "(atalho)",
-        specialty: specialtyHints[0] ?? null,
-        city: origin.city,
-        planId: activePlanId,
-        resultCount: ranked.length,
-      },
-    });
-  }
+  await prisma.searchEvent.create({
+    data: {
+      userId: session?.user?.id ?? null,
+      query: q || specialty || type || "(atalho)",
+      specialty: specialtyHints[0] ?? null,
+      city: origin.city,
+      planId: activePlanId,
+      resultCount: ranked.length,
+    },
+  });
 
-  const results: SearchResultItem[] = ranked.map((p) => ({
-    id: p.id,
-    name: p.name,
-    type: p.type,
-    photoUrl: p.photoUrl,
-    address: p.address,
-    neighborhood: p.neighborhood,
-    city: p.city,
-    latitude: p.latitude,
-    longitude: p.longitude,
-    rating: p.rating,
-    reviewCount: p.reviewCount,
-    openToday: p.openToday,
-    phone: p.phone,
-    whatsapp: p.whatsapp,
-    distanceKm: p.distanceKm,
-    specialties: p.specialties.map((s) => s.specialty.name),
-    planStatus: p.planStatus,
-    planSource: p.planSource,
-    lastVerifiedAt: p.lastVerifiedAt,
-    planName: activePlanName,
-  }));
+  const results: SearchResultItem[] = ranked.map((p) => {
+    const exps = Array.isArray(p.experiences) ? p.experiences : [];
+    const communityAccepted = exps.filter((e) => e.accepted).length;
+    const communityDenied = exps.filter((e) => !e.accepted).length;
+    return {
+      id: p.id,
+      name: p.name,
+      type: p.type,
+      photoUrl: p.photoUrl,
+      address: p.address,
+      neighborhood: p.neighborhood,
+      city: p.city,
+      latitude: p.latitude,
+      longitude: p.longitude,
+      rating: p.rating,
+      reviewCount: p.reviewCount,
+      openToday: p.openToday,
+      phone: p.phone,
+      whatsapp: p.whatsapp,
+      distanceKm: p.distanceKm,
+      specialties: p.specialties.map((s) => s.specialty.name),
+      planStatus: p.planStatus,
+      planSource: p.planSource ? normalizeSourceType(p.planSource) : null,
+      lastVerifiedAt: p.lastVerifiedAt,
+      planName: activePlanName,
+      communityAccepted,
+      communityDenied,
+      conflicting: p.planStatus === "conflicting",
+    };
+  });
 
   return {
     results,

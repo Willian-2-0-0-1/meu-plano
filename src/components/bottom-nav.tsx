@@ -1,15 +1,15 @@
+import { Heart, Home, Search, User, Users } from "lucide-react";
 import { headers } from "next/headers";
-import { Heart, Home, Search, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/", label: "Início", icon: Home },
   { href: "/buscar", label: "Buscar", icon: Search },
+  { href: "/comunidade", label: "Comunidade", icon: Users },
   { href: "/favoritos", label: "Favoritos", icon: Heart },
   { href: "/perfil", label: "Perfil", icon: User },
 ];
 
-/** Server Component + <a> nativos — sem next/navigation (evita HMR quebrado) */
 export async function BottomNav() {
   const h = await headers();
   const pathname = h.get("x-meu-plano-path") || "";
@@ -23,7 +23,7 @@ export async function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-200/80 bg-white/95 backdrop-blur-md safe-bottom">
-      <div className="mx-auto flex max-w-lg items-stretch justify-around px-2 pb-1 pt-1">
+      <div className="mx-auto flex max-w-lg items-stretch justify-around px-1 pb-1 pt-1 md:max-w-3xl">
         {items.map(({ href, label, icon: Icon }) => {
           const active =
             href === "/"
@@ -34,7 +34,7 @@ export async function BottomNav() {
               key={href}
               href={href}
               className={cn(
-                "flex flex-1 flex-col items-center gap-0.5 rounded-xl px-2 py-2 text-[11px] font-medium transition",
+                "flex flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[10px] font-medium transition sm:text-[11px]",
                 active ? "text-brand-600" : "text-slate-500 hover:text-slate-800"
               )}
             >
